@@ -1,17 +1,1 @@
-# Image Path Correction TODO
-
-## Task: Correct all image paths in the app
-
-### Files to Edit:
-- [x] pages/Home.tsx - Fixed 3 image paths
-- [x] pages/About.tsx - Fixed 2 image paths
-- [x] pages/Gallery.tsx - Fixed 18 image paths
-- [x] pages/Ministries.tsx - Fixed 1 image path
-- [x] pages/Events.tsx - Fixed 2 image paths
-- [x] pages/Sermons.tsx - Fixed 3 image paths
-
-### Image Path Corrections:
-All images updated to use `/src/assets/images/filename` format for consistency with Vite's public folder structure.
-
-### Status: COMPLETED ✓
-
+# Task Progress: Replace Quote Section with Image Slideshow in Home.tsx&#10;&#10;## TODO&#10;1. [x] Plan approved by user&#10;2. [x] Create TODO.md for tracking&#10;3. [x] Edit pages/Home.tsx: Remove quote section, add 5s auto-slideshow (fixed paths to /images/ matching public/ for Vite serving)&#10;4. [x] Verify edit and preview (npm run dev & refresh)&#10;5. [x] Mark complete and attempt_completion&#10;&#10;## COMPLETE

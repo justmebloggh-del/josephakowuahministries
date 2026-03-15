@@ -1,8 +1,30 @@
-
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const Home: React.FC = () => {
-  const navigate = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+  const [currentSlide, setCurrentSlide] = useState<number>(0);
+
+  const slideImages: string[] = [
+    '/images/bbc-bldofjesus.jpg',
+    '/images/bbc-childservs.jpg',
+    '/images/bbc-contact.jpg',
+    '/images/bbccounselling.jpg',
+    '/images/bbcmensfellow.jpg',
+    '/images/bbcthursday.jpg',
+    '/images/bbcwatchnight.jpg'
+  ];
+
+  useEffect(() => {
+    const interval: ReturnType<typeof setInterval> = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % slideImages.length);
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [slideImages.length]);
+
+  const navigate = (
+    e: React.MouseEvent<HTMLAnchorElement>,
+    href: string
+  ): void => {
     e.preventDefault();
     window.location.hash = href;
   };
@@ -18,10 +40,10 @@ const Home: React.FC = () => {
           </div>
           <a 
             href="https://www.facebook.com/AkowuahJosephMinistries/live" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="inline-block bg-white text-slate-950 px-6 py-2 rounded-full font-bold text-xs uppercase tracking-widest"
-                   >
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="inline-block bg-white text-slate-950 px-6 py-2 rounded-full font-bold text-xs uppercase tracking-widest"
+          >
             Watch Facebook Live Stream →
           </a>
         </div>
@@ -40,7 +62,11 @@ const Home: React.FC = () => {
           <div className="inline-block bg-amber-600 text-white px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-[0.3em] mb-8 shadow-xl">
             Your Season of Divine Change
           </div>
+<<<<<<< HEAD
           <h1 className="text-4xl md:text-8xl font-bold mb-8 leading-[0.9] max-w-5xl tracking-tighter">
+=======
+          <h1 className="text-4xl md:text-6xl font-bold mb-8 leading-[0.9] max-w-5xl tracking-tighter">
+>>>>>>> 5b7c637 (all)
             BLESSED <span className="text-amber-500">BAPTIST CHURCH</span> INTERNATIONAL
           </h1>
           <p className="text-xl md:text-2xl mb-12 text-slate-200 max-w-2xl leading-relaxed font-light">
@@ -66,6 +92,7 @@ const Home: React.FC = () => {
         </div>
       </section>
 
+<<<<<<< HEAD
       {/* Featured Quote */}
       <section className="py-24 bg-slate-900 text-white text-center border-y border-amber-600/20">
         <div className="max-w-4xl mx-auto px-4">
@@ -78,6 +105,35 @@ const Home: React.FC = () => {
             it shall not hurt them; they shall lay hands on the sick, and they shall recover.
           </h2>
           <p className="uppercase tracking-[0.3em] text-amber-500 font-bold text-xs">- Apostle Joseph Akwasi Akowuah</p>
+=======
+      {/* Image Slideshow */}
+      <section className="py-24 bg-slate-900 relative overflow-hidden border-y border-amber-600/20">
+        <div className="absolute inset-0">
+          <img 
+            src={slideImages[currentSlide] ?? slideImages[0]} 
+            alt={`Ministry moment ${currentSlide + 1}`} 
+            className="w-full h-[60vh] md:h-[70vh] object-cover brightness-[0.4] transition-all duration-1000 ease-in-out" 
+            key={currentSlide}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 via-transparent to-transparent" />
+        </div>
+        <div className="relative z-10 text-center text-white px-4">
+          <div className="max-w-4xl mx-auto">
+            <div className="flex justify-center gap-2 mb-8">
+              {slideImages.map((_: string, idx: number) => (
+                <button
+                  key={idx}
+                  onClick={() => setCurrentSlide(idx)}
+                  className={`w-3 h-3 rounded-full transition-all ${
+                    idx === currentSlide ? 'bg-amber-500 scale-125' : 'bg-white/50 hover:bg-amber-400'
+                  }`}
+                />
+              ))}
+            </div>
+            <p className="text-amber-400 uppercase tracking-[0.3em] font-bold text-sm mb-4">Prophetic Moments</p>
+            <h3 className="text-2xl md:text-4xl font-serif italic">Experience the Glory</h3>
+          </div>
+>>>>>>> 5b7c637 (all)
         </div>
       </section>
 
@@ -161,3 +217,4 @@ const Home: React.FC = () => {
 };
 
 export default Home;
+
