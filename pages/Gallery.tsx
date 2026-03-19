@@ -3,22 +3,22 @@ import React, { useState } from 'react';
 
 const Gallery: React.FC = () => {
   const images = [
-    { url: "/images/bbc-bldofjesus.jpg", title: "midweeksvs" },
-    { url: "/images/crusade.jpg", title: "crusade" },
-    { url: "/images/crusade1.jpg", title: "crusade" },
-    { url: "/images/bbcevangelismapstle.jpg", title: "Evangelist" },
-    { url: "/images/sunday3.jpg", title: "Sunday Service" },
+    { url: "/images/bbc1.jpg", title: "BBC Ministry 1" },
+    { url: "/images/bbc2.jpg", title: "BBC Ministry 2" },
+    { url: "/images/bbc3.jpg", title: "BBC Ministry 3" },
+    { url: "/images/bbc4.jpg", title: "BBC Ministry 4" },
+    { url: "/images/bbc5.jpg", title: "BBC Ministry 5" },
+    { url: "/images/bbc6.jpg", title: "BBC Ministry 6" },
+    { url: "/images/bbc7.jpg", title: "BBC Ministry 7" },
+    { url: "/images/bbc8.jpg", title: "BBC Ministry 8" },
+    { url: "/images/bbc9.jpg", title: "BBC Ministry 9" },
+    { url: "/images/bbc10.jpg", title: "BBC Ministry 10" },
+    { url: "/images/bbc11.jpg", title: "BBC Ministry 11" },
+    { url: "/images/bbc12.jpg", title: "BBC Ministry 12" },
+    { url: "/images/bbc13.jpg", title: "BBC Ministry 13" },
     { url: "/images/bbc-man.jpg", title: "Men's Ministry" },
-    { url: "/images/akwaaba-ministry.jpg", title: "Akwaaba Ministry" },
-    { url: "/images/choir.jpg", title: "choir" },
-    { url: "/images/mainp2.jpg", title: "church service" },
-    { url: "/images/premises.jpg", title: "church compound view" },
-    { url: "/images/pastors.jpg", title: "Pastors" },
-    { url: "/images/conse1.jpg", title: "Apostolic consecration" },
-    { url: "/images/audit.jpg", title: "main auditorium" },
-    { url: "/images/mainpic.jpg", title: "church service" },
-    { url: "/images/menf1.jpg", title: "men fellowship" },
-    { url: "/images/seedtimharvestime.jpg", title: "Akwaaba Ministry" },
+    { url: "/images/bbcprayer.jpg", title: "Prayer Meeting" },
+    { url: "/images/bbcevangelismapstle.jpg", title: "Evangelism" },
   ];
 
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -40,11 +40,11 @@ const Gallery: React.FC = () => {
       {/* Gallery Grid */}
       <section className="py-24">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-6 space-y-6">
+          <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-3 sm:gap-4 lg:gap-6 space-y-4 sm:space-y-6 min-h-[150px] sm:min-h-[200px]">
             {images.map((img, idx) => (
               <div 
                 key={idx} 
-                className="relative group cursor-pointer overflow-hidden rounded-[2rem] break-inside-avoid shadow-sm hover:shadow-2xl transition-all duration-500 bg-slate-200 min-h-[200px]"
+className="relative group cursor-pointer overflow-hidden rounded-[2rem] break-inside-avoid shadow-sm hover:shadow-2xl transition-all duration-500 bg-slate-200 min-h-[150px] sm:min-h-[200px]"
                 onClick={() => setSelectedImage(img.url)}
               >
                 <img 
@@ -75,7 +75,7 @@ const Gallery: React.FC = () => {
           <img 
             src={selectedImage} 
             alt="Large View" 
-            className="max-w-full max-h-[85vh] rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 animate-scaleUp bg-slate-900" 
+            className="max-w-full max-h-[80vh] sm:max-h-[85vh] rounded-3xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 animate-scaleUp bg-slate-900" 
           />
         </div>
       )}
