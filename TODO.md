@@ -1,9 +1,16 @@
-# Home.tsx Slideshow Rebuild (No Stretch)
+# Fix Gallery.tsx Errors
 
-## Plan: Wrap img in fixed-aspect div (1:1), object-contain/center, prevent stretch
+**Issues Identified:**
+- Indentation error: gallery item div className missing indentation (JSX syntax warning)
+- Potential image paths/loads ok (real bbc files)
+
+**Plan:**
+1. Fix indentation on gallery div className
+2. Verify no other syntax/runtime errors
+3. Commit
+
 ## TODO:
-- [x] 1. Create TODO
-- [ ] 2. Read Home.tsx confirmed
-- [x] 3. Replace absolute inset-0 img with div container + img object-contain
-- [x] 4. Update TODO & test
-- [x] 5. Commit/push
+- [x] Create TODO
+- [x] Fix JSX indentation
+- [x] Update TODO
+- [x] Commit
