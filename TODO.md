@@ -1,8 +1,9 @@
-# Slideshow Mobile Responsiveness
+# Gallery.tsx Mobile Optimization
 
 ## TODO:
 - [x] 1. Create TODO.md
-- [x] 2. Update slideshow img classes for mobile: smaller max-h-[30vh] sm:max-h-[35vh] lg:max-h-[40vh], full-width center
-- [x] 3. Ensure border frame scales (padding adjustments if needed)
-- [x] 4. Update TODO
-- [x] 5. Commit/push
+- [x] 2. Add responsive min-h-[150px] sm:[200px], tighter gap-4 sm:gap-6, columns-1 sm:2 lg:3 xl:4 → xs:1 sm:2 md:3 lg:4
+- [x] 3. Lightbox mobile: max-h-[80vh] p-2
+- [x] 4. Update images array to real files (bbc1.jpg etc like Home)
+- [x] 5. Edit & test
+- [x] 6. Commit/push PR
