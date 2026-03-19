@@ -3,8 +3,7 @@ import React, { useState } from 'react';
 
 const Gallery: React.FC = () => {
   const images = [
-    { url: "/images/bbc-womenflsp.jpg", title: "women fellowship" },
-    { url: "/images/bbcwnlda.jpg", title: "women leadership" },
+    { url: "/images/bbc-bldofjesus.jpg", title: "midweeksvs" },
     { url: "/images/crusade.jpg", title: "crusade" },
     { url: "/images/crusade1.jpg", title: "crusade" },
     { url: "/images/bbcevangelismapstle.jpg", title: "Evangelist" },

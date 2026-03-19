@@ -1,17 +1,7 @@
-# Image Path Correction TODO
+# Home.tsx Slideshow Border Frame
 
-## Task: Correct all image paths in the app
-
-### Files to Edit:
-- [x] pages/Home.tsx - Fixed 3 image paths
-- [x] pages/About.tsx - Fixed 2 image paths
-- [x] pages/Gallery.tsx - Fixed 18 image paths
-- [x] pages/Ministries.tsx - Fixed 1 image path
-- [x] pages/Events.tsx - Fixed 2 image paths
-- [x] pages/Sermons.tsx - Fixed 3 image paths
-
-### Image Path Corrections:
-All images updated to use `/src/assets/images/filename` format for consistency with Vite's public folder structure.
-
-### Status: COMPLETED ✓
-
+## TODO:
+- [x] 1. Create TODO.md
+- [x] 2. Add div after img: className="absolute -top-6 -left-6 w-full h-full border-2 border-amber-600 rounded-3xl z-0"
+- [x] 3. Update TODO
+- [x] 4. Complete
