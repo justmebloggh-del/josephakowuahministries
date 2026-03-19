@@ -1,7 +1,8 @@
-# Home.tsx Slideshow Border Frame
+# Final Slideshow Text Removal
 
 ## TODO:
 - [x] 1. Create TODO.md
-- [x] 2. Add div after img: className="absolute -top-6 -left-6 w-full h-full border-2 border-amber-600 rounded-3xl z-0"
-- [x] 3. Update TODO
-- [x] 4. Complete
+- [x] 2. Remove text p/h3: "Prophetic Moments" and "Experience the Glory"
+- [x] 3. Keep only dots navigation
+- [x] 4. Update TODO
+- [x] 5. Commit/push PR update
