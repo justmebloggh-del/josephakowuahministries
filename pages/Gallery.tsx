@@ -44,7 +44,7 @@ const Gallery: React.FC = () => {
             {images.map((img, idx) => (
               <div 
                 key={idx} 
-className="relative group cursor-pointer overflow-hidden rounded-[2rem] break-inside-avoid shadow-sm hover:shadow-2xl transition-all duration-500 bg-slate-200 min-h-[150px] sm:min-h-[200px]"
+                className="relative group cursor-pointer overflow-hidden rounded-[2rem] break-inside-avoid shadow-sm hover:shadow-2xl transition-all duration-500 bg-slate-200 min-h-[150px] sm:min-h-[200px]"
                 onClick={() => setSelectedImage(img.url)}
               >
                 <img 
