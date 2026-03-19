@@ -119,14 +119,15 @@ const Home: React.FC = () => {
 
       {/* Slideshow */}
       <section className="py-24 bg-slate-900 relative overflow-hidden border-y border-amber-600/20">
-        <div className="absolute inset-0">
-          <img
-            src={slideImages[currentSlide]}
-            alt={`Ministry moment ${currentSlide + 1}`}
-            className="aspect-square w-full max-h-[30vh] sm:max-h-[35vh] lg:max-h-[40vh] h-auto object-cover brightness-[0.65] mx-auto transition-all duration-1000"
-          />
-          <div className="absolute -top-6 -left-6 w-full h-full border-2 border-amber-600 rounded-3xl z-0"></div>
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent" />
+        <div className="absolute inset-0 flex items-center justify-center p-4">
+          <div className="relative w-full h-[30vh] sm:h-[35vh] lg:h-[40vh] aspect-square flex items-center justify-center border-2 border-amber-600 rounded-3xl shadow-2xl overflow-hidden z-10">
+            <img
+              src={slideImages[currentSlide]}
+              alt={`Ministry moment ${currentSlide + 1}`}
+              className="w-full h-full object-contain brightness-[0.65] transition-all duration-1000"
+            />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent pointer-events-none" />
+          </div>
         </div>
 
         <div className="relative z-10 text-center text-white px-6">
