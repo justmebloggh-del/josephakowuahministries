@@ -11,9 +11,7 @@ const slideImages: string[] = [
   "/images/bbc8.jpg",
   "/images/bbc9.jpg",
   "/images/bbc10.jpg",
-  "/images/bbc11.jpg",
-  "/images/bbc12.jpg",
-  "/images/bbc13.jpg",
+ 
 ];
 
 const Home: React.FC = () => {
@@ -147,12 +145,6 @@ const Home: React.FC = () => {
             ))}
           </div>
 
-          <p className="text-amber-400 uppercase tracking-widest text-sm mb-4">
-            Prophetic Moments
-          </p>
-          <h3 className="text-2xl md:text-4xl font-serif italic">
-            Experience the Glory
-          </h3>
         </div>
       </section>
 
