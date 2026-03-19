@@ -123,7 +123,7 @@ const Home: React.FC = () => {
           <img
             src={slideImages[currentSlide]}
             alt={`Ministry moment ${currentSlide + 1}`}
-            className="aspect-square w-full max-h-[40vh] h-auto object-cover brightness-[0.65] mx-auto transition-all duration-1000"
+            className="aspect-square w-full max-h-[30vh] sm:max-h-[35vh] lg:max-h-[40vh] h-auto object-cover brightness-[0.65] mx-auto transition-all duration-1000"
           />
           <div className="absolute -top-6 -left-6 w-full h-full border-2 border-amber-600 rounded-3xl z-0"></div>
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent" />
