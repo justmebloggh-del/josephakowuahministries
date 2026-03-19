@@ -1,13 +1,19 @@
 import React, { useState, useEffect, useCallback } from "react";
 
 const slideImages: string[] = [
-  "/images/bbc-bldofjesus.jpg",
-  "/images/bbc-childservs.jpg",
-  "/images/bbc-contact.jpg",
-  "/images/bbccounselling.jpg",
-  "/images/bbcmensfellow.jpg",
-  "/images/bbcthursday.jpg",
-  "/images/bbcwatchnight.jpg",
+  "/images/bbc1.jpg",
+  "/images/bbc2.jpg",
+  "/images/bbc3.jpg",
+  "/images/bbc4.jpg",
+  "/images/bbc5.jpg",
+  "/images/bbc6.jpg",
+  "/images/bbc7.jpg",
+  "/images/bbc8.jpg",
+  "/images/bbc9.jpg",
+  "/images/bbc10.jpg",
+  "/images/bbc11.jpg",
+  "/images/bbc12.jpg",
+  "/images/bbc13.jpg",
 ];
 
 const Home: React.FC = () => {
@@ -119,9 +125,10 @@ const Home: React.FC = () => {
           <img
             src={slideImages[currentSlide]}
             alt={`Ministry moment ${currentSlide + 1}`}
-            className="w-full h-[65vh] object-cover brightness-[0.4] transition-all duration-1000"
+            className="aspect-square w-full max-h-[40vh] h-auto object-cover brightness-[0.65] mx-auto transition-all duration-1000"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent" />
+          <div className="absolute -top-6 -left-6 w-full h-full border-2 border-amber-600 rounded-3xl z-0"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/50 to-transparent" />
         </div>
 
         <div className="relative z-10 text-center text-white px-6">

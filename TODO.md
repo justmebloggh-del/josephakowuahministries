@@ -1,1 +1,7 @@
-# Task Progress: Replace Quote Section with Image Slideshow in Home.tsx&#10;&#10;## TODO&#10;1. [x] Plan approved by user&#10;2. [x] Create TODO.md for tracking&#10;3. [x] Edit pages/Home.tsx: Remove quote section, add 5s auto-slideshow (fixed paths to /images/ matching public/ for Vite serving)&#10;4. [x] Verify edit and preview (npm run dev & refresh)&#10;5. [x] Mark complete and attempt_completion&#10;&#10;## COMPLETE
+# Home.tsx Slideshow Border Frame
+
+## TODO:
+- [x] 1. Create TODO.md
+- [x] 2. Add div after img: className="absolute -top-6 -left-6 w-full h-full border-2 border-amber-600 rounded-3xl z-0"
+- [x] 3. Update TODO
+- [x] 4. Complete
