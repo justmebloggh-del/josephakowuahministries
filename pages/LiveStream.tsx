@@ -1,6 +1,13 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 
+declare global {
+  interface Window {
+    FB?: { XFBML: { parse: (node?: Element) => void } };
+    fbAsyncInit?: () => void;
+  }
+}
+
 const schedule = [
   { day: 'Sunday',    time: '8:00 AM GMT',  name: 'Grace Hour Service',     icon: '⛪' },
   { day: 'Wednesday', time: '6:00 PM GMT',  name: 'Blood of Jesus Service', icon: '💥' },
@@ -19,7 +26,44 @@ const isLikelyLive = () => {
 };
 
 const DEFAULT_SRC =
-  'https://www.facebook.com/plugins/video.php?height=314&href=https%3A%2F%2Fwww.facebook.com%2FAkowuahJosephMinistries%2Fvideos%2F1146991354277026%2F&show_text=false&width=560&t=0';
+  'https://www.facebook.com/AkowuahJosephMinistries/videos/1146991354277026/';
+
+/** Return the direct Facebook URL from either a direct URL or a plugin/video.php URL */
+function extractFbUrl(src: string): string | null {
+  // Already a direct Facebook URL
+  if (/facebook\.com\/(?!plugins)/.test(src)) return src;
+  // Plugin URL — decode the href param
+  try {
+    const url = new URL(src);
+    const href = url.searchParams.get('href');
+    if (href) return decodeURIComponent(href);
+  } catch { /* fall through */ }
+  return null;
+}
+
+function isFacebookSrc(src: string): boolean {
+  return src.includes('facebook.com');
+}
+
+let fbSdkLoaded = false;
+
+function loadFbSdk(onReady: () => void) {
+  if (fbSdkLoaded && window.FB) { onReady(); return; }
+
+  window.fbAsyncInit = () => {
+    fbSdkLoaded = true;
+    onReady();
+  };
+
+  if (document.getElementById('facebook-jssdk')) { return; }
+
+  const script = document.createElement('script');
+  script.id  = 'facebook-jssdk';
+  script.src = 'https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v20.0';
+  script.async = true;
+  script.defer = true;
+  document.head.appendChild(script);
+}
 
 const LiveStream: React.FC = () => {
   const [signalStrength, setSignalStrength] = useState(0);
@@ -27,7 +71,8 @@ const LiveStream: React.FC = () => {
   const [streamSrc,      setStreamSrc]      = useState(
     () => localStorage.getItem('bbc_stream_src') || DEFAULT_SRC
   );
-  const observerRef = useRef<IntersectionObserver | null>(null);
+  const observerRef  = useRef<IntersectionObserver | null>(null);
+  const fbContainerRef = useRef<HTMLDivElement | null>(null);
 
   /* Re-read stream src from localStorage whenever admin updates it */
   useEffect(() => {
@@ -52,6 +97,22 @@ const LiveStream: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
+  /* Load FB SDK and parse after embed is shown */
+  useEffect(() => {
+    if (!showEmbed || !isFacebookSrc(streamSrc)) return;
+
+    loadFbSdk(() => {
+      if (fbContainerRef.current && window.FB) {
+        window.FB.XFBML.parse(fbContainerRef.current);
+      }
+    });
+
+    // If SDK already loaded, parse immediately
+    if (window.FB && fbContainerRef.current) {
+      window.FB.XFBML.parse(fbContainerRef.current);
+    }
+  }, [showEmbed, streamSrc]);
+
   useEffect(() => {
     observerRef.current = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add('visible')),
@@ -65,6 +126,8 @@ const LiveStream: React.FC = () => {
 
   const connected = signalStrength === 100;
   const live = isLikelyLive();
+  const isFb = isFacebookSrc(streamSrc);
+  const fbUrl = isFb ? extractFbUrl(streamSrc) : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white animate-fadeIn">
@@ -146,7 +209,43 @@ const LiveStream: React.FC = () => {
                 />
               </div>
             </div>
+          ) : isFb && fbUrl ? (
+            /* Facebook JS SDK embed — responsive on all screen sizes */
+            <>
+              <div
+                ref={fbContainerRef}
+                id="fb-root"
+                className="absolute inset-0 w-full h-full flex items-center justify-center bg-slate-900"
+              >
+                <div
+                  className="fb-video"
+                  data-href={fbUrl}
+                  data-width="auto"
+                  data-show-text="false"
+                  data-allowfullscreen="true"
+                  data-autoplay="false"
+                  style={{ width: '100%', height: '100%' }}
+                />
+              </div>
+
+              {/* Stream badge overlay */}
+              <div className="absolute inset-x-0 bottom-0 p-6 pointer-events-none bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between z-10">
+                <div className="flex items-center gap-3">
+                  {live ? (
+                    <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">
+                      LIVE
+                    </span>
+                  ) : (
+                    <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">
+                      REPLAY
+                    </span>
+                  )}
+                  <p className="text-xs font-bold text-white/80">Masofa TV · BBC International</p>
+                </div>
+              </div>
+            </>
           ) : (
+            /* YouTube / generic iframe fallback */
             <>
               <iframe
                 src={streamSrc}

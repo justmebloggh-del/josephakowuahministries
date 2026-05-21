@@ -22,7 +22,7 @@ const BLANK_SERMON: Omit<Sermon, 'id' | 'dateAdded' | 'plays' | 'downloads'> = {
 };
 
 const DEFAULT_SRC =
-  'https://www.facebook.com/plugins/video.php?height=314&href=https%3A%2F%2Fwww.facebook.com%2FAkowuahJosephMinistries%2Fvideos%2F1146991354277026%2F&show_text=false&width=560&t=0';
+  'https://www.facebook.com/AkowuahJosephMinistries/videos/1146991354277026/';
 
 /* ── Helpers ── */
 
@@ -35,19 +35,17 @@ function parseToEmbedSrc(raw: string): string | null {
   const iframeSrc = s.match(/src=["']([^"']+)["']/i);
   if (iframeSrc) return iframeSrc[1];
 
-  // 2. Facebook video URL  →  plugin embed
+  // 2. Facebook video URL  →  store direct URL (LiveStream uses FB SDK for mobile)
   //    e.g. https://www.facebook.com/PAGE/videos/VIDEO_ID/
   const fbVideo = s.match(/facebook\.com\/([^/]+)\/videos\/(\d+)/i);
   if (fbVideo) {
-    const encoded = encodeURIComponent(`https://www.facebook.com/${fbVideo[1]}/videos/${fbVideo[2]}/`);
-    return `https://www.facebook.com/plugins/video.php?height=314&href=${encoded}&show_text=false&width=560&t=0`;
+    return `https://www.facebook.com/${fbVideo[1]}/videos/${fbVideo[2]}/`;
   }
 
-  // 3. Facebook live URL  →  plugin embed
+  // 3. Facebook live URL  →  store direct URL
   const fbLive = s.match(/facebook\.com\/([^/?#]+)\/live/i);
   if (fbLive) {
-    const encoded = encodeURIComponent(`https://www.facebook.com/${fbLive[1]}/live/`);
-    return `https://www.facebook.com/plugins/video.php?height=314&href=${encoded}&show_text=false&width=560&t=0`;
+    return `https://www.facebook.com/${fbLive[1]}/live/`;
   }
 
   // 4. YouTube watch  →  embed
@@ -59,7 +57,7 @@ function parseToEmbedSrc(raw: string): string | null {
   if (ytShort) return `https://www.youtube.com/embed/${ytShort[1]}?autoplay=1`;
 
   // 6. YouTube embed URL already  →  pass through
-  if (s.includes('youtube.com/embed/') || s.includes('facebook.com/plugins/video')) return s;
+  if (s.includes('youtube.com/embed/') || s.includes('facebook.com/')) return s;
 
   return null;
 }
