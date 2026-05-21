@@ -1,6 +1,10 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { Sermon, SERMONS_KEY } from '../types';
+import {
+  getToken, getPageId, clearFBCache, getCacheAge,
+  testConnection, FB_TOKEN_KEY, FB_PAGE_ID_KEY, FB_DEFAULT_PAGE,
+} from '../services/facebookService';
 
 /* ── Constants ── */
 const ADMIN_PASSWORD  = 'BBC@Admin2025';
@@ -166,7 +170,41 @@ const AdminDashboard: React.FC = () => {
   const [parseErr,    setParseErr]    = useState('');
   const [previewing,  setPreviewing]  = useState(false);
   const [published,   setPublished]   = useState(false);
-  const [activeTab,   setActiveTab]   = useState<'stream' | 'history' | 'info' | 'preaching'>('stream');
+  const [activeTab,   setActiveTab]   = useState<'stream' | 'history' | 'info' | 'preaching' | 'facebook'>('stream');
+
+  /* ── Facebook state ── */
+  const [fbToken,      setFbToken]      = useState(() => getToken());
+  const [fbPageId,     setFbPageId]     = useState(() => getPageId());
+  const [fbShowToken,  setFbShowToken]  = useState(false);
+  const [fbTesting,    setFbTesting]    = useState(false);
+  const [fbTestResult, setFbTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+  const [fbCacheAge,   setFbCacheAge]   = useState<number | null>(() => getCacheAge(getPageId()));
+
+  const saveFbSettings = () => {
+    localStorage.setItem(FB_TOKEN_KEY,   fbToken.trim());
+    localStorage.setItem(FB_PAGE_ID_KEY, fbPageId.trim() || FB_DEFAULT_PAGE);
+    setFbTestResult({ ok: true, msg: 'Settings saved. Visit the Gallery to sync photos.' });
+  };
+
+  const handleTestConnection = async () => {
+    if (!fbToken.trim()) return;
+    setFbTesting(true);
+    setFbTestResult(null);
+    try {
+      const name = await testConnection(fbToken.trim(), fbPageId.trim() || FB_DEFAULT_PAGE);
+      setFbTestResult({ ok: true, msg: `Connected to: ${name}` });
+    } catch (err) {
+      setFbTestResult({ ok: false, msg: err instanceof Error ? err.message : 'Connection failed.' });
+    } finally {
+      setFbTesting(false);
+    }
+  };
+
+  const handleClearCache = () => {
+    clearFBCache();
+    setFbCacheAge(null);
+    setFbTestResult({ ok: true, msg: 'Photo cache cleared. Gallery will re-fetch on next visit.' });
+  };
 
   /* ── Preaching state ── */
   const [sermons, setSermons] = useState<Sermon[]>(() => {
@@ -373,6 +411,7 @@ const AdminDashboard: React.FC = () => {
             { id: 'stream',    label: '📡 Stream'    },
             { id: 'history',   label: '🕑 History'   },
             { id: 'preaching', label: '🎙️ Preaching' },
+            { id: 'facebook',  label: '📘 Facebook'  },
             { id: 'info',      label: 'ℹ️ Info'      },
           ] as const).map((tab) => (
             <button
@@ -631,6 +670,146 @@ const AdminDashboard: React.FC = () => {
                 For a production deployment, store it as an environment variable and validate
                 server-side. Stream URLs are persisted in <code className="font-mono text-amber-400">localStorage</code> and
                 visible to any user of this browser — do not store sensitive credentials here.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════ */}
+        {/* TAB: FACEBOOK                        */}
+        {/* ════════════════════════════════════ */}
+        {activeTab === 'facebook' && (
+          <div className="max-w-2xl space-y-6">
+
+            {/* Status card */}
+            <div className={`rounded-3xl p-5 border flex items-center gap-4 ${fbToken ? 'bg-green-900/20 border-green-700/30' : 'bg-slate-900 border-slate-800'}`}>
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center text-xl flex-shrink-0 ${fbToken ? 'bg-green-600/20' : 'bg-slate-800'}`}>
+                📘
+              </div>
+              <div>
+                <p className="text-white font-bold text-sm">
+                  {fbToken ? 'Facebook API Connected' : 'Not Connected'}
+                </p>
+                <p className="text-slate-400 text-xs mt-0.5">
+                  {fbToken
+                    ? `Page: ${fbPageId || FB_DEFAULT_PAGE} · Cache age: ${fbCacheAge ? `${Math.round(fbCacheAge / 60000)}m` : 'none'}`
+                    : 'Enter your Page Access Token below to sync gallery photos from Facebook.'}
+                </p>
+              </div>
+            </div>
+
+            {/* Settings form */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-5">
+              <h2 className="text-white font-bold text-base">Facebook API Settings</h2>
+
+              {/* Page ID */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                  Facebook Page ID or Username
+                </label>
+                <input
+                  value={fbPageId}
+                  onChange={e => setFbPageId(e.target.value)}
+                  placeholder={FB_DEFAULT_PAGE}
+                  className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600"
+                />
+                <p className="text-slate-600 text-[10px] mt-1.5">
+                  e.g. <span className="text-slate-500 font-mono">AkowuahJosephMinistries</span> or the numeric Page ID
+                </p>
+              </div>
+
+              {/* Access Token */}
+              <div>
+                <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+                  Page Access Token
+                </label>
+                <div className="relative">
+                  <input
+                    type={fbShowToken ? 'text' : 'password'}
+                    value={fbToken}
+                    onChange={e => setFbToken(e.target.value)}
+                    placeholder="EAAxxxxxx…"
+                    className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 pr-16 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600 font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setFbShowToken(s => !s)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 text-xs font-bold uppercase tracking-wider"
+                  >
+                    {fbShowToken ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Test result */}
+              {fbTestResult && (
+                <div className={`flex items-start gap-3 text-xs px-4 py-3 rounded-2xl font-medium ${
+                  fbTestResult.ok
+                    ? 'bg-green-900/20 border border-green-800/40 text-green-400'
+                    : 'bg-red-900/20 border border-red-800/40 text-red-400'
+                }`}>
+                  <span className="mt-0.5">{fbTestResult.ok ? '✅' : '⚠️'}</span>
+                  {fbTestResult.msg}
+                </div>
+              )}
+
+              {/* Actions */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  onClick={handleTestConnection}
+                  disabled={!fbToken.trim() || fbTesting}
+                  className="flex-1 bg-slate-800 border border-slate-700 text-white py-3 rounded-xl font-bold text-sm hover:bg-slate-700 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {fbTesting ? 'Testing…' : 'Test Connection'}
+                </button>
+                <button
+                  onClick={saveFbSettings}
+                  disabled={!fbToken.trim()}
+                  className="flex-1 bg-amber-600 text-white py-3 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-amber-500 transition-all shadow-lg shadow-amber-900/30 disabled:opacity-40 disabled:cursor-not-allowed active:scale-[0.98]"
+                >
+                  Save Settings
+                </button>
+              </div>
+
+              {/* Clear cache */}
+              {fbToken && (
+                <button
+                  onClick={handleClearCache}
+                  className="w-full bg-slate-800/50 border border-slate-700/50 text-slate-400 hover:text-white py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all hover:border-slate-600"
+                >
+                  Clear Photo Cache (force re-fetch)
+                </button>
+              )}
+            </div>
+
+            {/* How to get a token */}
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 space-y-4">
+              <h3 className="text-white font-bold text-sm">How to get a Page Access Token</h3>
+              {[
+                { n: '1', t: 'Go to Facebook Graph API Explorer', d: 'Visit developers.facebook.com/tools/explorer' },
+                { n: '2', t: 'Select your Facebook App', d: 'Create a free app at developers.facebook.com if you don\'t have one.' },
+                { n: '3', t: 'Choose your Page', d: 'In the "User or Page" dropdown, select your ministry Facebook Page.' },
+                { n: '4', t: 'Request permissions', d: 'Add: pages_show_list, pages_read_engagement, public_profile.' },
+                { n: '5', t: 'Generate & copy token', d: 'Click Generate Access Token, copy it, and paste it above.' },
+                { n: '6', t: 'Extend token life (optional)', d: 'Use the Access Token Debugger to exchange for a 60-day long-lived token.' },
+              ].map(step => (
+                <div key={step.n} className="flex gap-4">
+                  <span className="w-6 h-6 bg-amber-600/20 text-amber-500 rounded-full flex items-center justify-center text-xs font-black flex-shrink-0 mt-0.5">{step.n}</span>
+                  <div>
+                    <p className="text-white text-sm font-semibold">{step.t}</p>
+                    <p className="text-slate-500 text-xs mt-0.5">{step.d}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Security note */}
+            <div className="bg-amber-900/20 border border-amber-700/30 rounded-3xl p-5">
+              <p className="text-amber-300 font-bold text-xs mb-1 flex items-center gap-2"><span>🔒</span> Security Note</p>
+              <p className="text-amber-200/60 text-xs leading-relaxed">
+                Your token is stored in <span className="font-mono text-amber-400">localStorage</span> on this device only and is never sent anywhere except directly to <span className="font-mono text-amber-400">graph.facebook.com</span>.
+                Do not share this device's browser storage with untrusted users.
+                Tokens expire after ~60 days — return here to refresh when the gallery stops syncing.
               </p>
             </div>
           </div>
