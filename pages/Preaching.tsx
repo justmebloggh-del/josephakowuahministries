@@ -456,9 +456,8 @@ const Preaching: React.FC = () => {
             Audio Sermon Library
           </span>
           <h1 className="text-5xl md:text-7xl font-bold text-white mb-5 animate-slideUp leading-tight">
-            Prophetic{' '}
             <span style={{ background: 'linear-gradient(135deg,#f59e0b,#b45309)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-              Preachings
+              Rhema
             </span>
           </h1>
           <p className="text-slate-400 text-lg max-w-xl mx-auto leading-relaxed mb-10 animate-slideUp">
