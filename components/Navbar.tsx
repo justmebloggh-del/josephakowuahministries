@@ -66,9 +66,11 @@ const Navbar: React.FC = () => {
               aria-label="Joseph Akowuah Ministries – Home"
             >
               <div className="relative">
-                <div className="w-11 h-11 bg-gradient-to-br from-amber-500 to-amber-700 rounded-xl flex items-center justify-center text-white font-black text-xl shadow-md group-hover:shadow-amber-500/40 transition-all duration-300 group-hover:scale-105">
-                  J
-                </div>
+                <img
+                  src="/images/logo.jpeg"
+                  alt="Joseph Akowuah Ministries logo"
+                  className="w-11 h-11 rounded-xl object-cover animate-logo"
+                />
                 <span className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-white animate-pulse" aria-hidden="true" />
               </div>
               <div className="flex flex-col leading-none gap-0.5">
