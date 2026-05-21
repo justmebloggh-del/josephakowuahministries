@@ -1,6 +1,10 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
+/* Native dimensions Facebook encodes in the plugin URL */
+const FB_W = 560;
+const FB_H = 314;
+
 const schedule = [
   { day: 'Sunday',    time: '8:00 AM GMT',  name: 'Grace Hour Service',     icon: '⛪' },
   { day: 'Wednesday', time: '6:00 PM GMT',  name: 'Blood of Jesus Service', icon: '💥' },
@@ -18,36 +22,43 @@ const isLikelyLive = () => {
          (day === 5 && hour >= 22);
 };
 
+/* Default: the exact plugin URL from the Facebook "Embed" button */
 const DEFAULT_SRC =
-  'https://www.facebook.com/AkowuahJosephMinistries/videos/1146991354277026/';
+  'https://www.facebook.com/plugins/video.php?height=314&href=https%3A%2F%2Fwww.facebook.com%2FAkowuahJosephMinistries%2Fvideos%2F1146991354277026%2F&show_text=false&width=560&t=0';
 
-const FB_PAGE_LIVE = 'https://www.facebook.com/AkowuahJosephMinistries/live';
+/**
+ * Normalise any admin-saved stream URL into a renderable src:
+ *  - direct FB video/live URL  → plugin embed URL
+ *  - plugin URL already        → pass through
+ *  - YouTube                   → pass through (already an embed URL)
+ */
+function toEmbedSrc(src: string): string {
+  const s = src.trim();
+  if (!s) return DEFAULT_SRC;
 
-/** Extract the direct Facebook URL from a plugin URL's href param, or return src if already direct */
-function extractDirectFbUrl(src: string): string | null {
-  if (!src.includes('facebook.com')) return null;
-  if (!src.includes('plugins/video.php')) return src;
-  try {
-    const href = new URL(src).searchParams.get('href');
-    if (href) return decodeURIComponent(href);
-  } catch { /* fall through */ }
-  return null;
+  // Already a FB plugin URL
+  if (s.includes('facebook.com/plugins/video')) return s;
+
+  // Direct FB video: https://www.facebook.com/PAGE/videos/ID/
+  const fbVideo = s.match(/facebook\.com\/([^/]+)\/videos\/(\d+)/i);
+  if (fbVideo) {
+    const href = encodeURIComponent(`https://www.facebook.com/${fbVideo[1]}/videos/${fbVideo[2]}/`);
+    return `https://www.facebook.com/plugins/video.php?height=${FB_H}&href=${href}&show_text=false&width=${FB_W}&t=0`;
+  }
+
+  // Direct FB live: https://www.facebook.com/PAGE/live
+  const fbLive = s.match(/facebook\.com\/([^/?#]+)\/live/i);
+  if (fbLive) {
+    const href = encodeURIComponent(`https://www.facebook.com/${fbLive[1]}/live/`);
+    return `https://www.facebook.com/plugins/video.php?height=${FB_H}&href=${href}&show_text=false&width=${FB_W}&t=0`;
+  }
+
+  // Anything else (YouTube embed, etc.)
+  return s;
 }
 
-function buildFbPluginUrl(directUrl: string, w: number): string {
-  const h = Math.round(w * 9 / 16);
-  return (
-    `https://www.facebook.com/plugins/video.php` +
-    `?href=${encodeURIComponent(directUrl)}` +
-    `&width=${w}&height=${h}` +
-    `&show_text=false&autoplay=false`
-  );
-}
-
-/** True on phones / tablets — Facebook iframe embeds are blocked by mobile browsers */
-function isMobileDevice(): boolean {
-  return window.innerWidth < 768 ||
-    /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+function isFbEmbed(src: string) {
+  return src.includes('facebook.com');
 }
 
 const LiveStream: React.FC = () => {
@@ -56,20 +67,12 @@ const LiveStream: React.FC = () => {
   const [streamSrc,      setStreamSrc]      = useState(
     () => localStorage.getItem('bbc_stream_src') || DEFAULT_SRC
   );
-  const [embedUrl,  setEmbedUrl]  = useState('');
-  const [onMobile,  setOnMobile]  = useState(false);
-  const playerRef   = useRef<HTMLDivElement | null>(null);
-  const observerRef = useRef<IntersectionObserver | null>(null);
+  const [scale, setScale] = useState(1);
 
-  /* Detect mobile on mount and on resize */
-  useEffect(() => {
-    const check = () => setOnMobile(isMobileDevice());
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
+  const playerBoxRef = useRef<HTMLDivElement | null>(null);
+  const observerRef  = useRef<IntersectionObserver | null>(null);
 
-  /* Re-read stream src from localStorage whenever admin updates it */
+  /* Sync src from admin */
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'bbc_stream_src' && e.newValue) setStreamSrc(e.newValue);
@@ -92,29 +95,24 @@ const LiveStream: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
-  /* Build desktop iframe URL */
-  const refreshEmbedUrl = useCallback(() => {
-    const fbDirect = extractDirectFbUrl(streamSrc);
-    if (fbDirect) {
-      const w = playerRef.current?.offsetWidth || Math.min(window.innerWidth, 1152);
-      setEmbedUrl(buildFbPluginUrl(fbDirect, w));
-    } else {
-      setEmbedUrl(streamSrc); // YouTube or other — pass through
-    }
-  }, [streamSrc]);
+  /* Compute the CSS scale so the 560×314 iframe fills the container */
+  const recalcScale = useCallback(() => {
+    const w = playerBoxRef.current?.offsetWidth;
+    if (w) setScale(w / FB_W);
+  }, []);
 
   useEffect(() => {
-    if (!showEmbed || onMobile) return;
-    const t = setTimeout(refreshEmbedUrl, 60);
+    if (!showEmbed) return;
+    const t = setTimeout(recalcScale, 60);
     return () => clearTimeout(t);
-  }, [showEmbed, onMobile, refreshEmbedUrl]);
+  }, [showEmbed, recalcScale]);
 
   useEffect(() => {
-    if (!showEmbed || onMobile) return;
-    window.addEventListener('resize', refreshEmbedUrl);
-    return () => window.removeEventListener('resize', refreshEmbedUrl);
-  }, [showEmbed, onMobile, refreshEmbedUrl]);
+    window.addEventListener('resize', recalcScale);
+    return () => window.removeEventListener('resize', recalcScale);
+  }, [recalcScale]);
 
+  /* Scroll reveal */
   useEffect(() => {
     observerRef.current = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add('visible')),
@@ -127,13 +125,14 @@ const LiveStream: React.FC = () => {
   }, [showEmbed]);
 
   const connected = signalStrength === 100;
-  const live = isLikelyLive();
-  const fbDirect = extractDirectFbUrl(streamSrc) || FB_PAGE_LIVE;
+  const live      = isLikelyLive();
+  const embedSrc  = toEmbedSrc(streamSrc);
+  const fb        = isFbEmbed(embedSrc);
 
   return (
     <div className="min-h-screen bg-slate-950 text-white animate-fadeIn">
 
-      {/* ── Sticky stream header ── */}
+      {/* ── Sticky header ── */}
       <div className="sticky top-20 z-40 bg-slate-900/95 backdrop-blur-xl border-b border-white/5 py-4">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-5">
@@ -145,9 +144,7 @@ const LiveStream: React.FC = () => {
               <h1 className="text-xl font-bold flex items-center gap-3">
                 Prophetic Live Altar
                 {live && (
-                  <span className="bg-red-600 text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider animate-pulse">
-                    ON AIR
-                  </span>
+                  <span className="bg-red-600 text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider animate-pulse">ON AIR</span>
                 )}
               </h1>
               <p className="text-slate-400 text-[10px] uppercase tracking-[0.2em] mt-0.5">
@@ -158,7 +155,7 @@ const LiveStream: React.FC = () => {
 
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex gap-1 items-end h-5">
-              {[1, 2, 3, 4, 5].map((i) => (
+              {[1,2,3,4,5].map((i) => (
                 <div
                   key={i}
                   className={`w-1.5 rounded-full transition-all duration-400 ${signalStrength >= i * 20 ? 'bg-amber-500' : 'bg-slate-700'}`}
@@ -167,7 +164,7 @@ const LiveStream: React.FC = () => {
               ))}
             </div>
             <a
-              href={FB_PAGE_LIVE}
+              href="https://www.facebook.com/AkowuahJosephMinistries/live"
               target="_blank"
               rel="noopener noreferrer"
               className="bg-blue-600 hover:bg-blue-500 px-6 py-2.5 rounded-full text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-900/30 active:scale-95"
@@ -181,10 +178,16 @@ const LiveStream: React.FC = () => {
         </div>
       </div>
 
-      {/* ── Main broadcast player ── */}
+      {/* ── Player ── */}
       <section className="max-w-6xl mx-auto px-4 py-12">
+        {/*
+          The outer box is aspect-video (16:9).
+          For Facebook embeds we render the iframe at its native 560×314 size
+          then scale it to fill the box with CSS transform — no clipping, no
+          scrollbars, interactive controls still work at any screen width.
+        */}
         <div
-          ref={playerRef}
+          ref={playerBoxRef}
           className="relative aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,.7)] border border-white/8"
         >
           {!showEmbed ? (
@@ -206,77 +209,61 @@ const LiveStream: React.FC = () => {
               </div>
             </div>
 
-          ) : onMobile ? (
-            /* ── Mobile: tap-to-open card (Facebook blocks iframe embeds on mobile) ── */
-            <a
-              href={fbDirect}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 via-blue-950/40 to-slate-900 text-center px-6 active:opacity-80 transition-opacity"
-            >
-              {/* Facebook logo */}
-              <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-2xl shadow-blue-900/60">
-                <svg className="w-12 h-12 fill-white" viewBox="0 0 24 24">
-                  <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.383 14.444 5 15.333 5H18V0h-3.333C11.333 0 9 2.333 9 5.333V8z" />
-                </svg>
-              </div>
-
-              {live && (
-                <span className="bg-red-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full mb-4 animate-pulse">
-                  🔴 ON AIR NOW
-                </span>
-              )}
-
-              <h2 className="text-2xl font-bold text-white mb-2">Watch on Facebook</h2>
-              <p className="text-slate-400 text-sm mb-8 max-w-xs leading-relaxed">
-                Tap to open the live stream in Facebook — the best experience on mobile.
-              </p>
-
-              <span className="bg-blue-600 text-white font-black uppercase tracking-widest text-sm px-8 py-4 rounded-2xl shadow-xl shadow-blue-900/40 flex items-center gap-3">
-                <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-                Open &amp; Play
-              </span>
-
-              <p className="text-slate-600 text-xs mt-6">
-                Opens in Facebook app or browser
-              </p>
-            </a>
-
-          ) : embedUrl ? (
-            /* ── Desktop: iframe embed ── */
+          ) : fb ? (
+            /* Facebook plugin embed — scaled to fill the container on every screen */
             <>
               <iframe
-                key={embedUrl}
-                src={embedUrl}
+                src={embedSrc}
+                width={FB_W}
+                height={FB_H}
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  border: 'none',
+                  overflow: 'hidden',
+                  display: 'block',
+                  transformOrigin: 'top left',
+                  transform: `scale(${scale})`,
+                }}
+                allowFullScreen
+                allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+                title="BBC International Live Stream"
+              />
+              {/* Badge — pointer-events-none so it doesn't block the player */}
+              <div className="absolute inset-x-0 bottom-0 p-4 pointer-events-none bg-gradient-to-t from-black/70 to-transparent flex items-end gap-3 z-10">
+                {live
+                  ? <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">LIVE</span>
+                  : <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">REPLAY</span>
+                }
+                <p className="text-xs font-bold text-white/80">Masofa TV · BBC International</p>
+              </div>
+            </>
+
+          ) : (
+            /* YouTube / generic embed */
+            <>
+              <iframe
+                key={embedSrc}
+                src={embedSrc}
                 className="absolute inset-0 w-full h-full"
                 style={{ border: 'none', overflow: 'hidden', display: 'block' }}
                 allowFullScreen
                 allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
                 title="BBC International Live Stream"
               />
-              <div className="absolute inset-x-0 bottom-0 p-6 pointer-events-none bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between z-10">
-                <div className="flex items-center gap-3">
-                  {live ? (
-                    <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">LIVE</span>
-                  ) : (
-                    <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">REPLAY</span>
-                  )}
-                  <p className="text-xs font-bold text-white/80">Masofa TV · BBC International</p>
-                </div>
+              <div className="absolute inset-x-0 bottom-0 p-4 pointer-events-none bg-gradient-to-t from-black/70 to-transparent flex items-end gap-3 z-10">
+                {live
+                  ? <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">LIVE</span>
+                  : <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">REPLAY</span>
+                }
+                <p className="text-xs font-bold text-white/80">Masofa TV · BBC International</p>
               </div>
             </>
-
-          ) : (
-            /* Fallback while embed URL is being calculated */
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-10 h-10 border-4 border-amber-600/20 border-t-amber-600 rounded-full animate-spin" />
-            </div>
           )}
         </div>
 
-        {/* ── Info & support section ── */}
+        {/* ── Info & support ── */}
         <div className="mt-14 grid grid-cols-1 lg:grid-cols-12 gap-10">
 
           <div className="lg:col-span-8 space-y-8 reveal-left">

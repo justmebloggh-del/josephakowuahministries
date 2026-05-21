@@ -22,7 +22,7 @@ const BLANK_SERMON: Omit<Sermon, 'id' | 'dateAdded' | 'plays' | 'downloads'> = {
 };
 
 const DEFAULT_SRC =
-  'https://www.facebook.com/AkowuahJosephMinistries/videos/1146991354277026/';
+  'https://www.facebook.com/plugins/video.php?height=314&href=https%3A%2F%2Fwww.facebook.com%2FAkowuahJosephMinistries%2Fvideos%2F1146991354277026%2F&show_text=false&width=560&t=0';
 
 /* ── Helpers ── */
 
