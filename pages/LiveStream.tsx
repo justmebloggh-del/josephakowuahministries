@@ -1,12 +1,5 @@
 
-import React, { useState, useEffect, useRef } from 'react';
-
-declare global {
-  interface Window {
-    FB?: { XFBML: { parse: (node?: Element) => void } };
-    fbAsyncInit?: () => void;
-  }
-}
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 
 const schedule = [
   { day: 'Sunday',    time: '8:00 AM GMT',  name: 'Grace Hour Service',     icon: '⛪' },
@@ -28,41 +21,34 @@ const isLikelyLive = () => {
 const DEFAULT_SRC =
   'https://www.facebook.com/AkowuahJosephMinistries/videos/1146991354277026/';
 
-/** Return the direct Facebook URL from either a direct URL or a plugin/video.php URL */
-function extractFbUrl(src: string): string | null {
-  // Already a direct Facebook URL
-  if (/facebook\.com\/(?!plugins)/.test(src)) return src;
-  // Plugin URL — decode the href param
+/**
+ * Return the direct Facebook video/live URL from either:
+ *  - a direct URL:  https://www.facebook.com/PAGE/videos/ID/
+ *  - a plugin URL:  https://www.facebook.com/plugins/video.php?href=<encoded>
+ */
+function extractDirectFbUrl(src: string): string | null {
+  if (!src.includes('facebook.com')) return null;
+  if (!src.includes('plugins/video.php')) return src; // already direct
   try {
-    const url = new URL(src);
-    const href = url.searchParams.get('href');
+    const href = new URL(src).searchParams.get('href');
     if (href) return decodeURIComponent(href);
   } catch { /* fall through */ }
   return null;
 }
 
-function isFacebookSrc(src: string): boolean {
-  return src.includes('facebook.com');
-}
-
-let fbSdkLoaded = false;
-
-function loadFbSdk(onReady: () => void) {
-  if (fbSdkLoaded && window.FB) { onReady(); return; }
-
-  window.fbAsyncInit = () => {
-    fbSdkLoaded = true;
-    onReady();
-  };
-
-  if (document.getElementById('facebook-jssdk')) { return; }
-
-  const script = document.createElement('script');
-  script.id  = 'facebook-jssdk';
-  script.src = 'https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v20.0';
-  script.async = true;
-  script.defer = true;
-  document.head.appendChild(script);
+/**
+ * Build a Facebook plugin embed URL where the internal player width matches
+ * the actual rendered container width so it fills the frame on every screen.
+ */
+function buildFbPluginUrl(directUrl: string, containerWidth: number): string {
+  const w = Math.max(320, containerWidth);
+  const h = Math.round(w * 9 / 16);
+  return (
+    `https://www.facebook.com/plugins/video.php` +
+    `?href=${encodeURIComponent(directUrl)}` +
+    `&width=${w}&height=${h}` +
+    `&show_text=false&autoplay=false`
+  );
 }
 
 const LiveStream: React.FC = () => {
@@ -71,8 +57,9 @@ const LiveStream: React.FC = () => {
   const [streamSrc,      setStreamSrc]      = useState(
     () => localStorage.getItem('bbc_stream_src') || DEFAULT_SRC
   );
-  const observerRef  = useRef<IntersectionObserver | null>(null);
-  const fbContainerRef = useRef<HTMLDivElement | null>(null);
+  const [embedUrl, setEmbedUrl] = useState('');
+  const playerRef   = useRef<HTMLDivElement | null>(null);
+  const observerRef = useRef<IntersectionObserver | null>(null);
 
   /* Re-read stream src from localStorage whenever admin updates it */
   useEffect(() => {
@@ -97,21 +84,31 @@ const LiveStream: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
-  /* Load FB SDK and parse after embed is shown */
-  useEffect(() => {
-    if (!showEmbed || !isFacebookSrc(streamSrc)) return;
-
-    loadFbSdk(() => {
-      if (fbContainerRef.current && window.FB) {
-        window.FB.XFBML.parse(fbContainerRef.current);
-      }
-    });
-
-    // If SDK already loaded, parse immediately
-    if (window.FB && fbContainerRef.current) {
-      window.FB.XFBML.parse(fbContainerRef.current);
+  /* Build the correct embed URL once the player div is visible and sized */
+  const refreshEmbedUrl = useCallback(() => {
+    const fbDirect = extractDirectFbUrl(streamSrc);
+    if (fbDirect) {
+      const w = playerRef.current?.offsetWidth || window.innerWidth;
+      setEmbedUrl(buildFbPluginUrl(fbDirect, w));
+    } else {
+      // YouTube or other — use the URL directly
+      setEmbedUrl(streamSrc);
     }
-  }, [showEmbed, streamSrc]);
+  }, [streamSrc]);
+
+  useEffect(() => {
+    if (!showEmbed) return;
+    // Tiny delay so the container has been painted and offsetWidth is reliable
+    const t = setTimeout(refreshEmbedUrl, 60);
+    return () => clearTimeout(t);
+  }, [showEmbed, refreshEmbedUrl]);
+
+  /* Rebuild embed URL on window resize so it stays correctly sized */
+  useEffect(() => {
+    if (!showEmbed) return;
+    window.addEventListener('resize', refreshEmbedUrl);
+    return () => window.removeEventListener('resize', refreshEmbedUrl);
+  }, [showEmbed, refreshEmbedUrl]);
 
   useEffect(() => {
     observerRef.current = new IntersectionObserver(
@@ -126,8 +123,6 @@ const LiveStream: React.FC = () => {
 
   const connected = signalStrength === 100;
   const live = isLikelyLive();
-  const isFb = isFacebookSrc(streamSrc);
-  const fbUrl = isFb ? extractFbUrl(streamSrc) : null;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white animate-fadeIn">
@@ -136,7 +131,6 @@ const LiveStream: React.FC = () => {
       <div className="sticky top-20 z-40 bg-slate-900/95 backdrop-blur-xl border-b border-white/5 py-4">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-5">
-            {/* Signal dot */}
             <div className="relative">
               <div className={`w-4 h-4 rounded-full transition-all duration-500 ${connected ? 'bg-red-500 shadow-lg shadow-red-500/50' : 'bg-slate-700'}`} />
               {connected && <div className="absolute inset-0 w-4 h-4 bg-red-500 rounded-full animate-ping opacity-60" />}
@@ -157,21 +151,15 @@ const LiveStream: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Signal bars */}
             <div className="hidden sm:flex gap-1 items-end h-5">
               {[1, 2, 3, 4, 5].map((i) => (
                 <div
                   key={i}
-                  className={`w-1.5 rounded-full transition-all duration-400 ${
-                    signalStrength >= i * 20
-                      ? 'bg-amber-500'
-                      : 'bg-slate-700'
-                  }`}
+                  className={`w-1.5 rounded-full transition-all duration-400 ${signalStrength >= i * 20 ? 'bg-amber-500' : 'bg-slate-700'}`}
                   style={{ height: `${i * 20}%` }}
                 />
               ))}
             </div>
-
             <a
               href="https://www.facebook.com/AkowuahJosephMinistries/live"
               target="_blank"
@@ -189,10 +177,12 @@ const LiveStream: React.FC = () => {
 
       {/* ── Main broadcast player ── */}
       <section className="max-w-6xl mx-auto px-4 py-12">
-        <div className="relative aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,.7)] border border-white/8 group">
-
-          {!showEmbed ? (
-            /* Loading state */
+        <div
+          ref={playerRef}
+          className="relative aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,.7)] border border-white/8"
+        >
+          {!showEmbed || !embedUrl ? (
+            /* Loading / scanning state */
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm">
               <div className="relative mb-8">
                 <div className="w-20 h-20 border-4 border-amber-600/20 border-t-amber-600 rounded-full animate-spin" />
@@ -209,55 +199,21 @@ const LiveStream: React.FC = () => {
                 />
               </div>
             </div>
-          ) : isFb && fbUrl ? (
-            /* Facebook JS SDK embed — responsive on all screen sizes */
-            <>
-              <div
-                ref={fbContainerRef}
-                id="fb-root"
-                className="absolute inset-0 w-full h-full flex items-center justify-center bg-slate-900"
-              >
-                <div
-                  className="fb-video"
-                  data-href={fbUrl}
-                  data-width="auto"
-                  data-show-text="false"
-                  data-allowfullscreen="true"
-                  data-autoplay="false"
-                  style={{ width: '100%', height: '100%' }}
-                />
-              </div>
-
-              {/* Stream badge overlay */}
-              <div className="absolute inset-x-0 bottom-0 p-6 pointer-events-none bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between z-10">
-                <div className="flex items-center gap-3">
-                  {live ? (
-                    <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">
-                      LIVE
-                    </span>
-                  ) : (
-                    <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">
-                      REPLAY
-                    </span>
-                  )}
-                  <p className="text-xs font-bold text-white/80">Masofa TV · BBC International</p>
-                </div>
-              </div>
-            </>
           ) : (
-            /* YouTube / generic iframe fallback */
             <>
               <iframe
-                src={streamSrc}
+                key={embedUrl}
+                src={embedUrl}
                 className="absolute inset-0 w-full h-full"
                 style={{ border: 'none', overflow: 'hidden', display: 'block' }}
                 allowFullScreen
                 allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
                 title="BBC International Live Stream"
+
               />
 
               {/* Stream badge overlay */}
-              <div className="absolute inset-x-0 bottom-0 p-6 pointer-events-none bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between">
+              <div className="absolute inset-x-0 bottom-0 p-6 pointer-events-none bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between z-10">
                 <div className="flex items-center gap-3">
                   {live ? (
                     <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">
@@ -292,12 +248,11 @@ const LiveStream: React.FC = () => {
               </p>
             </div>
 
-            {/* Weekly stream schedule */}
             <div className="grid sm:grid-cols-2 gap-4">
               {schedule.map((s) => (
                 <div
                   key={s.day}
-                  className="bg-white/5 border border-white/10 p-6 rounded-2xl hover:border-amber-600/40 transition-all group"
+                  className="bg-white/5 border border-white/10 p-6 rounded-2xl hover:border-amber-600/40 transition-all"
                 >
                   <span className="text-2xl mb-3 block">{s.icon}</span>
                   <p className="text-amber-400 font-black text-[10px] uppercase tracking-widest mb-1">{s.day}</p>
@@ -310,7 +265,6 @@ const LiveStream: React.FC = () => {
 
           {/* Right: actions */}
           <div className="lg:col-span-4 space-y-5 reveal-right">
-            {/* Give */}
             <div className="bg-amber-600 p-8 rounded-3xl relative overflow-hidden group">
               <div className="relative z-10">
                 <h3 className="text-xl font-bold mb-2">Sow into the Altar</h3>
@@ -328,7 +282,6 @@ const LiveStream: React.FC = () => {
               <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-125 transition-transform" />
             </div>
 
-            {/* Prayer */}
             <div className="bg-slate-900 border border-white/10 p-8 rounded-3xl hover:border-amber-600/20 transition-all">
               <h3 className="text-lg font-bold mb-3">Prophetic Prayer Request</h3>
               <p className="text-slate-400 text-sm mb-6 leading-relaxed">
@@ -347,7 +300,6 @@ const LiveStream: React.FC = () => {
               </a>
             </div>
 
-            {/* Subscribe reminder */}
             <div className="text-center py-4">
               <p className="text-slate-500 text-xs">
                 Never miss a broadcast —{' '}
