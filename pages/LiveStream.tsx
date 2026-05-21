@@ -21,14 +21,12 @@ const isLikelyLive = () => {
 const DEFAULT_SRC =
   'https://www.facebook.com/AkowuahJosephMinistries/videos/1146991354277026/';
 
-/**
- * Return the direct Facebook video/live URL from either:
- *  - a direct URL:  https://www.facebook.com/PAGE/videos/ID/
- *  - a plugin URL:  https://www.facebook.com/plugins/video.php?href=<encoded>
- */
+const FB_PAGE_LIVE = 'https://www.facebook.com/AkowuahJosephMinistries/live';
+
+/** Extract the direct Facebook URL from a plugin URL's href param, or return src if already direct */
 function extractDirectFbUrl(src: string): string | null {
   if (!src.includes('facebook.com')) return null;
-  if (!src.includes('plugins/video.php')) return src; // already direct
+  if (!src.includes('plugins/video.php')) return src;
   try {
     const href = new URL(src).searchParams.get('href');
     if (href) return decodeURIComponent(href);
@@ -36,12 +34,7 @@ function extractDirectFbUrl(src: string): string | null {
   return null;
 }
 
-/**
- * Build a Facebook plugin embed URL where the internal player width matches
- * the actual rendered container width so it fills the frame on every screen.
- */
-function buildFbPluginUrl(directUrl: string, containerWidth: number): string {
-  const w = Math.max(320, containerWidth);
+function buildFbPluginUrl(directUrl: string, w: number): string {
   const h = Math.round(w * 9 / 16);
   return (
     `https://www.facebook.com/plugins/video.php` +
@@ -51,15 +44,30 @@ function buildFbPluginUrl(directUrl: string, containerWidth: number): string {
   );
 }
 
+/** True on phones / tablets — Facebook iframe embeds are blocked by mobile browsers */
+function isMobileDevice(): boolean {
+  return window.innerWidth < 768 ||
+    /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
 const LiveStream: React.FC = () => {
   const [signalStrength, setSignalStrength] = useState(0);
   const [showEmbed,      setShowEmbed]      = useState(false);
   const [streamSrc,      setStreamSrc]      = useState(
     () => localStorage.getItem('bbc_stream_src') || DEFAULT_SRC
   );
-  const [embedUrl, setEmbedUrl] = useState('');
+  const [embedUrl,  setEmbedUrl]  = useState('');
+  const [onMobile,  setOnMobile]  = useState(false);
   const playerRef   = useRef<HTMLDivElement | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
+
+  /* Detect mobile on mount and on resize */
+  useEffect(() => {
+    const check = () => setOnMobile(isMobileDevice());
+    check();
+    window.addEventListener('resize', check);
+    return () => window.removeEventListener('resize', check);
+  }, []);
 
   /* Re-read stream src from localStorage whenever admin updates it */
   useEffect(() => {
@@ -84,31 +92,28 @@ const LiveStream: React.FC = () => {
     return () => clearInterval(id);
   }, []);
 
-  /* Build the correct embed URL once the player div is visible and sized */
+  /* Build desktop iframe URL */
   const refreshEmbedUrl = useCallback(() => {
     const fbDirect = extractDirectFbUrl(streamSrc);
     if (fbDirect) {
-      const w = playerRef.current?.offsetWidth || window.innerWidth;
+      const w = playerRef.current?.offsetWidth || Math.min(window.innerWidth, 1152);
       setEmbedUrl(buildFbPluginUrl(fbDirect, w));
     } else {
-      // YouTube or other — use the URL directly
-      setEmbedUrl(streamSrc);
+      setEmbedUrl(streamSrc); // YouTube or other — pass through
     }
   }, [streamSrc]);
 
   useEffect(() => {
-    if (!showEmbed) return;
-    // Tiny delay so the container has been painted and offsetWidth is reliable
+    if (!showEmbed || onMobile) return;
     const t = setTimeout(refreshEmbedUrl, 60);
     return () => clearTimeout(t);
-  }, [showEmbed, refreshEmbedUrl]);
+  }, [showEmbed, onMobile, refreshEmbedUrl]);
 
-  /* Rebuild embed URL on window resize so it stays correctly sized */
   useEffect(() => {
-    if (!showEmbed) return;
+    if (!showEmbed || onMobile) return;
     window.addEventListener('resize', refreshEmbedUrl);
     return () => window.removeEventListener('resize', refreshEmbedUrl);
-  }, [showEmbed, refreshEmbedUrl]);
+  }, [showEmbed, onMobile, refreshEmbedUrl]);
 
   useEffect(() => {
     observerRef.current = new IntersectionObserver(
@@ -123,6 +128,7 @@ const LiveStream: React.FC = () => {
 
   const connected = signalStrength === 100;
   const live = isLikelyLive();
+  const fbDirect = extractDirectFbUrl(streamSrc) || FB_PAGE_LIVE;
 
   return (
     <div className="min-h-screen bg-slate-950 text-white animate-fadeIn">
@@ -161,7 +167,7 @@ const LiveStream: React.FC = () => {
               ))}
             </div>
             <a
-              href="https://www.facebook.com/AkowuahJosephMinistries/live"
+              href={FB_PAGE_LIVE}
               target="_blank"
               rel="noopener noreferrer"
               className="bg-blue-600 hover:bg-blue-500 px-6 py-2.5 rounded-full text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-900/30 active:scale-95"
@@ -181,8 +187,8 @@ const LiveStream: React.FC = () => {
           ref={playerRef}
           className="relative aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,.7)] border border-white/8"
         >
-          {!showEmbed || !embedUrl ? (
-            /* Loading / scanning state */
+          {!showEmbed ? (
+            /* Scanning animation */
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm">
               <div className="relative mb-8">
                 <div className="w-20 h-20 border-4 border-amber-600/20 border-t-amber-600 rounded-full animate-spin" />
@@ -199,7 +205,47 @@ const LiveStream: React.FC = () => {
                 />
               </div>
             </div>
-          ) : (
+
+          ) : onMobile ? (
+            /* ── Mobile: tap-to-open card (Facebook blocks iframe embeds on mobile) ── */
+            <a
+              href={fbDirect}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-slate-900 via-blue-950/40 to-slate-900 text-center px-6 active:opacity-80 transition-opacity"
+            >
+              {/* Facebook logo */}
+              <div className="w-20 h-20 bg-blue-600 rounded-2xl flex items-center justify-center mb-6 shadow-2xl shadow-blue-900/60">
+                <svg className="w-12 h-12 fill-white" viewBox="0 0 24 24">
+                  <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.383 14.444 5 15.333 5H18V0h-3.333C11.333 0 9 2.333 9 5.333V8z" />
+                </svg>
+              </div>
+
+              {live && (
+                <span className="bg-red-600 text-white text-[10px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full mb-4 animate-pulse">
+                  🔴 ON AIR NOW
+                </span>
+              )}
+
+              <h2 className="text-2xl font-bold text-white mb-2">Watch on Facebook</h2>
+              <p className="text-slate-400 text-sm mb-8 max-w-xs leading-relaxed">
+                Tap to open the live stream in Facebook — the best experience on mobile.
+              </p>
+
+              <span className="bg-blue-600 text-white font-black uppercase tracking-widest text-sm px-8 py-4 rounded-2xl shadow-xl shadow-blue-900/40 flex items-center gap-3">
+                <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+                Open &amp; Play
+              </span>
+
+              <p className="text-slate-600 text-xs mt-6">
+                Opens in Facebook app or browser
+              </p>
+            </a>
+
+          ) : embedUrl ? (
+            /* ── Desktop: iframe embed ── */
             <>
               <iframe
                 key={embedUrl}
@@ -209,32 +255,30 @@ const LiveStream: React.FC = () => {
                 allowFullScreen
                 allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
                 title="BBC International Live Stream"
-
               />
-
-              {/* Stream badge overlay */}
               <div className="absolute inset-x-0 bottom-0 p-6 pointer-events-none bg-gradient-to-t from-black/80 to-transparent flex items-end justify-between z-10">
                 <div className="flex items-center gap-3">
                   {live ? (
-                    <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">
-                      LIVE
-                    </span>
+                    <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">LIVE</span>
                   ) : (
-                    <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">
-                      REPLAY
-                    </span>
+                    <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">REPLAY</span>
                   )}
                   <p className="text-xs font-bold text-white/80">Masofa TV · BBC International</p>
                 </div>
               </div>
             </>
+
+          ) : (
+            /* Fallback while embed URL is being calculated */
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-10 h-10 border-4 border-amber-600/20 border-t-amber-600 rounded-full animate-spin" />
+            </div>
           )}
         </div>
 
         {/* ── Info & support section ── */}
         <div className="mt-14 grid grid-cols-1 lg:grid-cols-12 gap-10">
 
-          {/* Left: description + schedule */}
           <div className="lg:col-span-8 space-y-8 reveal-left">
             <div>
               <h2 className="text-3xl font-bold mb-3">The Anointing Has No Boundaries</h2>
@@ -263,7 +307,6 @@ const LiveStream: React.FC = () => {
             </div>
           </div>
 
-          {/* Right: actions */}
           <div className="lg:col-span-4 space-y-5 reveal-right">
             <div className="bg-amber-600 p-8 rounded-3xl relative overflow-hidden group">
               <div className="relative z-10">
