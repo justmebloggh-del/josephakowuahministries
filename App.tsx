@@ -12,6 +12,7 @@ import Gallery from './pages/Gallery';
 import Give from './pages/Give';
 import Contact from './pages/Contact';
 import LiveStream from './pages/LiveStream';
+import AdminDashboard from './pages/AdminDashboard';
 
 const App: React.FC = () => {
   // Safe route management
@@ -46,17 +47,20 @@ const App: React.FC = () => {
       case '#/give': return <Give />;
       case '#/contact': return <Contact />;
       case '#/watch-live': return <LiveStream />;
+      case '#/admin': return <AdminDashboard />;
       default: return <Home />;
     }
   };
 
+  const isAdmin = currentPath === '#/admin';
+
   return (
     <div className="flex flex-col min-h-screen font-sans selection:bg-amber-100 selection:text-amber-900">
-      <Navbar />
+      {!isAdmin && <Navbar />}
       <main className="flex-grow">
         {renderPage()}
       </main>
-      <Footer />
+      {!isAdmin && <Footer />}
     </div>
   );
 };

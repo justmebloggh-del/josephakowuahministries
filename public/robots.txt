@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://josephakowuahministries.com/sitemap.xml
+
+# Disallow sensitive or non-public paths
+Disallow: /dist/
+Disallow: /.env*
+Disallow: /node_modules/
