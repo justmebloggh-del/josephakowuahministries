@@ -1,12 +1,21 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Sermon, SERMONS_KEY } from '../types';
 
 /* ── Constants ── */
-const ADMIN_PASSWORD  = 'BBC@Admin2025';          // change to env var in production
+const ADMIN_PASSWORD  = 'BBC@Admin2025';
 const STORAGE_KEY     = 'bbc_stream_src';
 const HISTORY_KEY     = 'bbc_stream_history';
 const SESSION_KEY     = 'bbc_admin_session';
 const MAX_HISTORY     = 8;
+
+const SERVICE_TYPES_OPTS = ['Sunday Service', 'Wednesday Service', 'Jericho Prayer', 'All-Night Warfare', 'Special Programme'];
+const TOPIC_OPTS         = ['Faith', 'Prayer', 'Healing', 'Deliverance', 'Finances', 'Marriage', 'Purpose', 'Prophecy', 'Salvation', 'Warfare', 'Restoration'];
+const BLANK_SERMON: Omit<Sermon, 'id' | 'dateAdded' | 'plays' | 'downloads'> = {
+  title: '', apostle: 'Apostle Joseph Akwasi Akowuah', date: '',
+  serviceType: 'Sunday Service', topic: 'Faith', series: '', duration: '',
+  description: '', thumbnail: '', audioUrl: '', featured: false,
+};
 
 const DEFAULT_SRC =
   'https://www.facebook.com/plugins/video.php?height=314&href=https%3A%2F%2Fwww.facebook.com%2FAkowuahJosephMinistries%2Fvideos%2F1146991354277026%2F&show_text=false&width=560&t=0';
@@ -157,7 +166,88 @@ const AdminDashboard: React.FC = () => {
   const [parseErr,    setParseErr]    = useState('');
   const [previewing,  setPreviewing]  = useState(false);
   const [published,   setPublished]   = useState(false);
-  const [activeTab,   setActiveTab]   = useState<'stream' | 'history' | 'info'>('stream');
+  const [activeTab,   setActiveTab]   = useState<'stream' | 'history' | 'info' | 'preaching'>('stream');
+
+  /* ── Preaching state ── */
+  const [sermons, setSermons] = useState<Sermon[]>(() => {
+    try { return JSON.parse(localStorage.getItem(SERMONS_KEY) || '[]'); } catch { return []; }
+  });
+  const [editingId,     setEditingId]     = useState<string | null>(null);
+  const [isAdding,      setIsAdding]      = useState(false);
+  const [form,          setForm]          = useState({ ...BLANK_SERMON });
+  const [uploadFile,    setUploadFile]    = useState<File | null>(null);
+  const [uploadPct,     setUploadPct]     = useState(0);
+  const [uploadDone,    setUploadDone]    = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const saveSermons = (updated: Sermon[]) => {
+    setSermons(updated);
+    localStorage.setItem(SERMONS_KEY, JSON.stringify(updated));
+    window.dispatchEvent(new StorageEvent('storage', { key: SERMONS_KEY, newValue: JSON.stringify(updated) }));
+  };
+
+  const openAdd = () => {
+    setForm({ ...BLANK_SERMON });
+    setEditingId(null);
+    setUploadFile(null);
+    setUploadPct(0);
+    setUploadDone(false);
+    setIsAdding(true);
+  };
+
+  const openEdit = (s: Sermon) => {
+    setForm({ title: s.title, apostle: s.apostle, date: s.date, serviceType: s.serviceType,
+              topic: s.topic, series: s.series, duration: s.duration, description: s.description,
+              thumbnail: s.thumbnail, audioUrl: s.audioUrl, featured: s.featured });
+    setEditingId(s.id);
+    setUploadFile(null);
+    setUploadPct(0);
+    setUploadDone(false);
+    setIsAdding(true);
+  };
+
+  const cancelForm = () => { setIsAdding(false); setEditingId(null); };
+
+  const handleAudioFile = (file: File) => {
+    const valid = /\.(mp3|wav|m4a|aac)$/i.test(file.name);
+    if (!valid) return;
+    setUploadFile(file);
+    setUploadPct(0);
+    setUploadDone(false);
+    let pct = 0;
+    const iv = setInterval(() => {
+      pct += Math.random() * 18 + 4;
+      if (pct >= 100) {
+        pct = 100;
+        clearInterval(iv);
+        const url = URL.createObjectURL(file);
+        setForm(f => ({ ...f, audioUrl: url }));
+        setUploadDone(true);
+      }
+      setUploadPct(Math.min(Math.floor(pct), 100));
+    }, 180);
+  };
+
+  const submitSermon = () => {
+    if (!form.title || !form.date) return;
+    if (editingId) {
+      saveSermons(sermons.map(s => s.id === editingId ? { ...s, ...form } : s));
+    } else {
+      const newS: Sermon = { ...form, id: `s${Date.now()}`, plays: 0, downloads: 0, dateAdded: new Date().toISOString() };
+      saveSermons([newS, ...sermons]);
+    }
+    cancelForm();
+  };
+
+  const deleteSermon = (id: string) => {
+    saveSermons(sermons.filter(s => s.id !== id));
+    setDeleteConfirm(null);
+  };
+
+  const toggleFeatured = (id: string) => {
+    saveSermons(sermons.map(s => s.id === id ? { ...s, featured: !s.featured } : s));
+  };
 
   /* Parse raw input whenever it changes */
   useEffect(() => {
@@ -278,18 +368,23 @@ const AdminDashboard: React.FC = () => {
         </div>
 
         {/* ── Tabs ── */}
-        <div className="flex gap-1 mb-8 bg-slate-900 border border-slate-800 p-1 rounded-2xl w-fit">
-          {(['stream', 'history', 'info'] as const).map((tab) => (
+        <div className="flex flex-wrap gap-1 mb-8 bg-slate-900 border border-slate-800 p-1 rounded-2xl w-fit">
+          {([
+            { id: 'stream',    label: '📡 Stream'    },
+            { id: 'history',   label: '🕑 History'   },
+            { id: 'preaching', label: '🎙️ Preaching' },
+            { id: 'info',      label: 'ℹ️ Info'      },
+          ] as const).map((tab) => (
             <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={`px-6 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
-                activeTab === tab
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                activeTab === tab.id
                   ? 'bg-amber-600 text-white shadow-md'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              {tab === 'stream' ? '📡 Stream' : tab === 'history' ? '🕑 History' : 'ℹ️ Info'}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -538,6 +633,273 @@ const AdminDashboard: React.FC = () => {
                 visible to any user of this browser — do not store sensitive credentials here.
               </p>
             </div>
+          </div>
+        )}
+
+        {/* ════════════════════════════════════ */}
+        {/* TAB: PREACHING                       */}
+        {/* ════════════════════════════════════ */}
+        {activeTab === 'preaching' && (
+          <div>
+            {/* Stats */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+              {[
+                { label: 'Total Sermons',  val: sermons.length,                                                     dot: 'bg-amber-500' },
+                { label: 'Total Plays',    val: sermons.reduce((a, s) => a + s.plays, 0).toLocaleString(),          dot: 'bg-green-500' },
+                { label: 'Total Downloads',val: sermons.reduce((a, s) => a + s.downloads, 0).toLocaleString(),      dot: 'bg-blue-500'  },
+              ].map(st => (
+                <div key={st.label} className="bg-slate-900 border border-slate-800 rounded-2xl p-5 flex items-center gap-4">
+                  <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${st.dot}`} />
+                  <div>
+                    <p className="text-white font-bold text-xl">{st.val}</p>
+                    <p className="text-slate-500 text-[10px] uppercase tracking-widest font-bold">{st.label}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Add / Edit Form */}
+            {isAdding ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 mb-8">
+                <h2 className="text-white font-bold text-lg mb-6">
+                  {editingId ? 'Edit Sermon' : 'Upload New Sermon'}
+                </h2>
+
+                <div className="grid md:grid-cols-2 gap-4 mb-4">
+                  {/* Title */}
+                  <div className="md:col-span-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Sermon Title *</label>
+                    <input value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+                      placeholder="e.g. Breaking the Spirit of Poverty"
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600" />
+                  </div>
+
+                  {/* Apostle */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Preacher</label>
+                    <input value={form.apostle} onChange={e => setForm(f => ({ ...f, apostle: e.target.value }))}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  </div>
+
+                  {/* Date */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Date Preached *</label>
+                    <input type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500" />
+                  </div>
+
+                  {/* Service Type */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Service Type</label>
+                    <select value={form.serviceType} onChange={e => setForm(f => ({ ...f, serviceType: e.target.value }))}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer">
+                      {SERVICE_TYPES_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Topic */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Topic</label>
+                    <select value={form.topic} onChange={e => setForm(f => ({ ...f, topic: e.target.value }))}
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 cursor-pointer">
+                      {TOPIC_OPTS.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  </div>
+
+                  {/* Series */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Series (optional)</label>
+                    <input value={form.series} onChange={e => setForm(f => ({ ...f, series: e.target.value }))}
+                      placeholder="e.g. Kingdom Prosperity"
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600" />
+                  </div>
+
+                  {/* Duration */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Duration</label>
+                    <input value={form.duration} onChange={e => setForm(f => ({ ...f, duration: e.target.value }))}
+                      placeholder="e.g. 1:12:45"
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600" />
+                  </div>
+
+                  {/* Thumbnail */}
+                  <div className="md:col-span-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Thumbnail URL</label>
+                    <input value={form.thumbnail} onChange={e => setForm(f => ({ ...f, thumbnail: e.target.value }))}
+                      placeholder="https://… or /images/founder4.jpg"
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600" />
+                  </div>
+
+                  {/* Description */}
+                  <div className="md:col-span-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Description</label>
+                    <textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
+                      rows={3} placeholder="Short summary of the sermon…"
+                      className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600 resize-none" />
+                  </div>
+
+                  {/* Audio section */}
+                  <div className="md:col-span-2">
+                    <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Audio File</label>
+
+                    {/* Upload zone */}
+                    <div
+                      onClick={() => fileInputRef.current?.click()}
+                      onDragOver={e => e.preventDefault()}
+                      onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleAudioFile(f); }}
+                      className="border-2 border-dashed border-slate-700 hover:border-amber-600/50 rounded-xl p-6 text-center cursor-pointer transition-all mb-3"
+                    >
+                      <p className="text-slate-400 text-sm mb-1">
+                        {uploadFile ? uploadFile.name : 'Drag & drop or click to upload'}
+                      </p>
+                      <p className="text-slate-600 text-xs">MP3 · WAV · M4A · AAC — any file size</p>
+                      <input
+                        ref={fileInputRef} type="file" accept=".mp3,.wav,.m4a,.aac,audio/*"
+                        className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) handleAudioFile(f); }}
+                      />
+                    </div>
+
+                    {/* Upload progress */}
+                    {uploadFile && !uploadDone && (
+                      <div className="mb-3">
+                        <div className="flex justify-between text-[10px] text-slate-400 mb-1 font-bold">
+                          <span>Uploading… {uploadPct}%</span>
+                          <span>{(uploadFile.size / 1024 / 1024).toFixed(1)} MB</span>
+                        </div>
+                        <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                          <div className="h-full bg-amber-600 rounded-full transition-all duration-200" style={{ width: `${uploadPct}%` }} />
+                        </div>
+                      </div>
+                    )}
+                    {uploadDone && (
+                      <p className="text-green-400 text-xs font-bold mb-3">✓ File ready — session URL created</p>
+                    )}
+
+                    {/* Or paste URL */}
+                    <div>
+                      <p className="text-[10px] text-slate-500 uppercase tracking-wider font-bold mb-2">Or paste a cloud audio URL (recommended for persistence)</p>
+                      <input value={form.audioUrl.startsWith('blob:') ? '' : form.audioUrl}
+                        onChange={e => setForm(f => ({ ...f, audioUrl: e.target.value }))}
+                        placeholder="https://drive.google.com/… or SoundCloud / Dropbox direct link"
+                        className="w-full bg-slate-800 border border-slate-700 text-white text-sm rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-amber-500 placeholder:text-slate-600" />
+                    </div>
+                  </div>
+
+                  {/* Featured toggle */}
+                  <div className="md:col-span-2 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setForm(f => ({ ...f, featured: !f.featured }))}
+                      className={`w-11 h-6 rounded-full transition-all ${form.featured ? 'bg-amber-600' : 'bg-slate-700'}`}
+                    >
+                      <span className={`block w-5 h-5 bg-white rounded-full shadow transition-transform mx-0.5 ${form.featured ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                    <span className="text-slate-300 text-sm font-semibold">Mark as Featured</span>
+                  </div>
+                </div>
+
+                {/* Form actions */}
+                <div className="flex gap-3 pt-2 border-t border-slate-800">
+                  <button onClick={cancelForm}
+                    className="flex-1 bg-slate-800 border border-slate-700 text-white py-3 rounded-xl font-bold text-sm hover:bg-slate-700 transition-all">
+                    Cancel
+                  </button>
+                  <button onClick={submitSermon} disabled={!form.title || !form.date}
+                    className="flex-1 bg-amber-600 text-white py-3 rounded-xl font-black text-sm uppercase tracking-wider hover:bg-amber-500 transition-all disabled:opacity-40 disabled:cursor-not-allowed">
+                    {editingId ? 'Save Changes' : 'Publish Sermon'}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button onClick={openAdd}
+                className="flex items-center gap-2 bg-amber-600 hover:bg-amber-500 text-white px-6 py-3 rounded-xl font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-amber-900/30 mb-8 active:scale-95">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4"/>
+                </svg>
+                Upload New Sermon
+              </button>
+            )}
+
+            {/* Sermon list */}
+            {sermons.length === 0 ? (
+              <div className="text-center py-20 text-slate-600">
+                <p className="text-5xl mb-4">🎙️</p>
+                <p className="font-bold text-slate-400">No sermons yet.</p>
+                <p className="text-sm mt-1">Click "Upload New Sermon" to add the first message.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sermons.map(s => (
+                  <div key={s.id}
+                    className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-4 transition-all">
+
+                    {/* Thumbnail */}
+                    <img src={s.thumbnail || '/images/founder4.jpg'} alt=""
+                      onError={e => { (e.target as HTMLImageElement).src = '/images/founder4.jpg'; }}
+                      className="w-16 h-16 rounded-xl object-cover flex-shrink-0" />
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap mb-1">
+                        {s.featured && (
+                          <span className="text-[8px] font-black uppercase tracking-widest bg-amber-600/20 text-amber-400 border border-amber-600/20 px-2 py-0.5 rounded-full">
+                            Featured
+                          </span>
+                        )}
+                        <span className="text-[8px] font-black uppercase tracking-widest bg-slate-800 text-slate-400 px-2 py-0.5 rounded-full">
+                          {s.serviceType}
+                        </span>
+                        {s.audioUrl ? (
+                          <span className="text-[8px] font-black uppercase tracking-widest bg-green-900/30 text-green-400 px-2 py-0.5 rounded-full">Audio ✓</span>
+                        ) : (
+                          <span className="text-[8px] font-black uppercase tracking-widest bg-red-900/20 text-red-400 px-2 py-0.5 rounded-full">No Audio</span>
+                        )}
+                      </div>
+                      <p className="text-white font-bold text-sm truncate">{s.title}</p>
+                      <p className="text-slate-500 text-[10px]">
+                        {s.date} · {s.duration} · {s.plays.toLocaleString()} plays · {s.downloads.toLocaleString()} downloads
+                      </p>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="flex items-center gap-2 flex-shrink-0 flex-wrap">
+                      {/* Featured toggle */}
+                      <button onClick={() => toggleFeatured(s.id)}
+                        title={s.featured ? 'Remove from featured' : 'Mark as featured'}
+                        className={`text-xs px-3 py-1.5 rounded-lg font-bold transition-all border ${s.featured ? 'bg-amber-600/20 text-amber-400 border-amber-600/30 hover:bg-amber-600/30' : 'bg-slate-800 text-slate-400 border-slate-700 hover:border-amber-600/30'}`}>
+                        ★
+                      </button>
+
+                      {/* Edit */}
+                      <button onClick={() => openEdit(s)}
+                        className="text-xs px-3 py-1.5 bg-slate-800 border border-slate-700 text-slate-300 rounded-lg font-bold hover:border-amber-600/40 transition-all">
+                        Edit
+                      </button>
+
+                      {/* Delete */}
+                      {deleteConfirm === s.id ? (
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => deleteSermon(s.id)}
+                            className="text-xs px-3 py-1.5 bg-red-600 text-white rounded-lg font-black hover:bg-red-500 transition-all">
+                            Confirm
+                          </button>
+                          <button onClick={() => setDeleteConfirm(null)}
+                            className="text-xs px-2 py-1.5 text-slate-400 hover:text-white transition-colors">
+                            ×
+                          </button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setDeleteConfirm(s.id)}
+                          className="text-xs px-3 py-1.5 bg-red-900/20 border border-red-900/30 text-red-400 rounded-lg font-bold hover:bg-red-900/40 transition-all">
+                          Delete
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

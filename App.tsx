@@ -12,6 +12,7 @@ import Gallery from './pages/Gallery';
 import Give from './pages/Give';
 import Contact from './pages/Contact';
 import LiveStream from './pages/LiveStream';
+import Preaching from './pages/Preaching';
 import AdminDashboard from './pages/AdminDashboard';
 
 const App: React.FC = () => {
@@ -47,6 +48,7 @@ const App: React.FC = () => {
       case '#/give': return <Give />;
       case '#/contact': return <Contact />;
       case '#/watch-live': return <LiveStream />;
+      case '#/preaching': return <Preaching />;
       case '#/admin': return <AdminDashboard />;
       default: return <Home />;
     }
