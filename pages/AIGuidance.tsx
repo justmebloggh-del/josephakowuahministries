@@ -71,7 +71,7 @@ const AIGuidance: React.FC = () => {
         {/* ── Page header ── */}
         <div className="text-center mb-10">
           <span className="text-amber-600 text-xs font-black uppercase tracking-[0.35em] mb-3 block">
-            AI-Powered Ministry
+            Apostolic Powered Ministry
           </span>
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
             Masofa Altar
