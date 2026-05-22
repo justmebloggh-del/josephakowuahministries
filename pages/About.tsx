@@ -254,7 +254,7 @@ const About: React.FC = () => {
               onClick={(e) => navigate(e, '#/ai-guidance')}
               className="glass text-white px-10 py-4 rounded-full font-bold hover:bg-white/10 transition-all"
             >
-              Speak to Prophetic AI
+              Speak to Masofa Altar
             </a>
           </div>
         </div>

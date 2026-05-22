@@ -74,7 +74,7 @@ const AIGuidance: React.FC = () => {
             AI-Powered Ministry
           </span>
           <h1 className="text-4xl md:text-5xl font-bold text-slate-900 mb-4">
-            Prophetic AI Altar
+            Masofa Altar
           </h1>
           <p className="text-slate-500 text-lg font-light max-w-2xl mx-auto leading-relaxed">
             Receive instant scriptural guidance and breakthrough prayers powered by divine wisdom

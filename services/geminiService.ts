@@ -186,7 +186,7 @@ export const getSpiritualGuidance = async (
       "The Lord hears your heart. Our prayer team is standing by — please call +233 24 017 1460 for immediate intercession."
     );
   } catch (error) {
-    console.error("Prophetic AI connection error:", error);
+    console.error("Masofa Altar connection error:", error);
     return [
       "Beloved, the spiritual connection is being restored.",
       "",

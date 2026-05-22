@@ -28,7 +28,7 @@ const Footer: React.FC = () => {
   ];
 
   const connectLinks = [
-    { label: 'Prophetic AI Assistant', href: '#/ai-guidance' },
+    { label: 'Masofa Altar', href: '#/ai-guidance' },
     { label: 'Online Giving',          href: '#/give'        },
     { label: 'Prayer Requests',        href: '#/contact'     },
     { label: 'Partner With Us',        href: '#/give'        },
