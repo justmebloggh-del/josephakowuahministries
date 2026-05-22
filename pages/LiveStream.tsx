@@ -1,8 +1,17 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 
-const FB_W = 560;
-const FB_H = 314;
+declare global {
+  interface Window {
+    FB?: { XFBML: { parse: (el?: HTMLElement | null) => void } };
+  }
+}
+
+/* ── Constants ─────────────────────────────────────────────────────────────── */
+const FB_PAGE_BASE = 'https://www.facebook.com/AkowuahJosephMinistries';
+const FB_PAGE_LIVE = `${FB_PAGE_BASE}/live`;
+const DEFAULT_VIDEO = `${FB_PAGE_BASE}/videos/1146991354277026/`;
+const FB_W = 560, FB_H = 314;
 
 const schedule = [
   { day: 'Sunday',    time: '8:00 AM GMT',  name: 'Grace Hour Service',     icon: '⛪' },
@@ -11,152 +20,195 @@ const schedule = [
   { day: 'Friday',    time: '10:00 PM GMT', name: 'All-Night Warfare',      icon: '⚔️' },
 ];
 
+/* ── Helpers ───────────────────────────────────────────────────────────────── */
 const isLikelyLive = () => {
-  const now  = new Date();
-  const day  = now.getUTCDay();
-  const hour = now.getUTCHours();
-  return (day === 0 && hour >= 8  && hour <= 13) ||
-         (day === 3 && hour >= 18 && hour <= 20) ||
-         (day === 4 && hour >= 8  && hour <= 14) ||
-         (day === 5 && hour >= 22);
+  const now = new Date(), d = now.getUTCDay(), h = now.getUTCHours();
+  return (d===0&&h>=8&&h<=13)||(d===3&&h>=18&&h<=20)||(d===4&&h>=8&&h<=14)||(d===5&&h>=22);
 };
 
-const DEFAULT_SRC =
-  'https://www.facebook.com/plugins/video.php?height=314&href=https%3A%2F%2Fwww.facebook.com%2FAkowuahJosephMinistries%2Fvideos%2F1146991354277026%2F&show_text=false&width=560&t=0';
-
-const FB_PAGE_LIVE = 'https://www.facebook.com/AkowuahJosephMinistries/live';
-
-/** Extract the direct Facebook page URL from a plugin embed URL */
-function extractFbDirectUrl(src: string): string {
-  if (!src.includes('plugins/video.php')) return src;
-  try {
-    const href = new URL(src).searchParams.get('href');
-    if (href) return decodeURIComponent(href);
-  } catch { /* fall through */ }
-  return FB_PAGE_LIVE;
-}
-
-/** Convert any saved src to a proper plugin embed URL */
-function toPluginSrc(src: string): string {
-  const s = src.trim();
-  if (!s) return DEFAULT_SRC;
-  if (s.includes('facebook.com/plugins/video')) return s;
-  const fbVideo = s.match(/facebook\.com\/([^/]+)\/videos\/(\d+)/i);
-  if (fbVideo) {
-    const href = encodeURIComponent(`https://www.facebook.com/${fbVideo[1]}/videos/${fbVideo[2]}/`);
-    return `https://www.facebook.com/plugins/video.php?height=${FB_H}&href=${href}&show_text=false&width=${FB_W}&t=0`;
+/** Normalize any stored src to a direct Facebook video/live URL */
+function toDirectUrl(src: string): string {
+  const s = (src || '').trim();
+  if (!s) return DEFAULT_VIDEO;
+  if (s.includes('facebook.com/plugins/video.php')) {
+    try {
+      const href = new URL(s).searchParams.get('href');
+      if (href) return decodeURIComponent(href);
+    } catch { /* fall through */ }
   }
-  const fbLive = s.match(/facebook\.com\/([^/?#]+)\/live/i);
-  if (fbLive) {
-    const href = encodeURIComponent(`https://www.facebook.com/${fbLive[1]}/live/`);
-    return `https://www.facebook.com/plugins/video.php?height=${FB_H}&href=${href}&show_text=false&width=${FB_W}&t=0`;
-  }
-  return s; // YouTube / other pass-through
+  const fbV = s.match(/facebook\.com\/([^/]+)\/videos\/(\d+)/i);
+  if (fbV) return `https://www.facebook.com/${fbV[1]}/videos/${fbV[2]}/`;
+  const fbL = s.match(/facebook\.com\/([^/?#]+)\/live/i);
+  if (fbL) return `https://www.facebook.com/${fbL[1]}/live/`;
+  return s;
 }
 
-function isMobile(): boolean {
-  return window.matchMedia('(max-width: 767px)').matches ||
-    /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+/** Build plugin iframe URL from a direct FB URL */
+function toPluginSrc(directUrl: string, w = FB_W, h = FB_H): string {
+  if (!directUrl.includes('facebook.com')) return directUrl;
+  return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(directUrl)}&show_text=false&width=${w}&height=${h}&t=0`;
 }
 
+/* ── SVG icons ──────────────────────────────────────────────────────────────── */
+const FbIcon = ({ className }: { className: string }) => (
+  <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.383 14.444 5 15.333 5H18V0h-3.333C11.333 0 9 2.333 9 5.333V8z" />
+  </svg>
+);
+
+/* ── Types ──────────────────────────────────────────────────────────────────── */
+type EmbedState = 'scanning' | 'sdk-loading' | 'sdk-ready' | 'iframe' | 'error';
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   Component
+══════════════════════════════════════════════════════════════════════════════ */
 const LiveStream: React.FC = () => {
-  const [signalStrength, setSignalStrength] = useState(0);
-  const [showEmbed,      setShowEmbed]      = useState(false);
-  const [streamSrc,      setStreamSrc]      = useState(
-    () => localStorage.getItem('bbc_stream_src') || DEFAULT_SRC
+  const [signal,     setSignal]     = useState(0);
+  const [embedState, setEmbedState] = useState<EmbedState>('scanning');
+  const [streamSrc,  setStreamSrc]  = useState(
+    () => localStorage.getItem('bbc_stream_src') || DEFAULT_VIDEO
   );
-  const [scale,    setScale]    = useState(1);
-  const [onMobile, setOnMobile] = useState(false);
+  const [scale, setScale] = useState(1);
 
-  const playerBoxRef = useRef<HTMLDivElement | null>(null);
-  const observerRef  = useRef<IntersectionObserver | null>(null);
+  const playerRef   = useRef<HTMLDivElement>(null);
+  const sdkRef      = useRef<HTMLDivElement>(null);
+  const sdkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  /* Detect mobile */
+  /* Admin stream URL changes (other tab) */
   useEffect(() => {
-    const check = () => setOnMobile(isMobile());
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-
-  /* Sync src when admin updates it */
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
+    const fn = (e: StorageEvent) => {
       if (e.key === 'bbc_stream_src' && e.newValue) setStreamSrc(e.newValue);
     };
-    window.addEventListener('storage', onStorage);
-    return () => window.removeEventListener('storage', onStorage);
+    window.addEventListener('storage', fn);
+    return () => window.removeEventListener('storage', fn);
   }, []);
 
-  /* Signal scanning animation */
+  /* Fast signal scan (~600 ms) */
   useEffect(() => {
+    if (embedState !== 'scanning') return;
     let progress = 0;
     const id = setInterval(() => {
-      progress += Math.random() * 18;
-      setSignalStrength(Math.min(Math.floor(progress), 100));
+      progress += Math.random() * 28 + 8;
+      setSignal(Math.min(Math.floor(progress), 100));
       if (progress >= 100) {
         clearInterval(id);
-        setTimeout(() => setShowEmbed(true), 400);
+        setTimeout(() => setEmbedState('sdk-loading'), 150);
       }
-    }, 130);
+    }, 75);
     return () => clearInterval(id);
-  }, []);
+  }, [embedState]);
 
-  /* Scale the 560×314 iframe to fill the desktop container */
+  /* Initialize FB SDK embed — runs on all devices */
+  useEffect(() => {
+    if (embedState !== 'sdk-loading') return;
+
+    const directUrl = toDirectUrl(streamSrc);
+    const isFb = directUrl.includes('facebook.com');
+
+    if (!isFb) {
+      setEmbedState('iframe');
+      return;
+    }
+
+    let attempts = 0;
+    const MAX = 20; // poll up to 4 seconds
+
+    const tryParse = () => {
+      if (!sdkRef.current) return;
+
+      if (window.FB?.XFBML?.parse) {
+        sdkRef.current.innerHTML = '';
+        const div = document.createElement('div');
+        div.className = 'fb-video';
+        div.dataset.href = directUrl;
+        div.dataset.width = 'auto';
+        div.dataset.showText = 'false';
+        div.dataset.allowfullscreen = 'true';
+        sdkRef.current.appendChild(div);
+
+        // Two rAF ticks so the DOM has a real layout width before data-width="auto" is read
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            try {
+              window.FB!.XFBML.parse(sdkRef.current!);
+              setEmbedState('sdk-ready');
+            } catch {
+              setEmbedState('iframe');
+            }
+          });
+        });
+      } else if (attempts < MAX) {
+        attempts++;
+        sdkTimerRef.current = setTimeout(tryParse, 200);
+      } else {
+        setEmbedState('iframe');
+      }
+    };
+
+    tryParse();
+    return () => {
+      if (sdkTimerRef.current) clearTimeout(sdkTimerRef.current);
+    };
+  }, [embedState, streamSrc]);
+
+  /* Scale plugin iframe to fill the container (iframe fallback path) */
   const recalcScale = useCallback(() => {
-    const w = playerBoxRef.current?.offsetWidth;
+    const w = playerRef.current?.offsetWidth;
     if (w) setScale(w / FB_W);
   }, []);
 
   useEffect(() => {
-    if (!showEmbed || onMobile) return;
+    if (embedState !== 'iframe') return;
     const t = setTimeout(recalcScale, 60);
     return () => clearTimeout(t);
-  }, [showEmbed, onMobile, recalcScale]);
+  }, [embedState, recalcScale]);
 
   useEffect(() => {
-    if (onMobile) return;
     window.addEventListener('resize', recalcScale);
     return () => window.removeEventListener('resize', recalcScale);
-  }, [onMobile, recalcScale]);
+  }, [recalcScale]);
 
   /* Scroll-reveal */
   useEffect(() => {
-    observerRef.current = new IntersectionObserver(
+    if (embedState === 'scanning') return;
+    const obs = new IntersectionObserver(
       (entries) => entries.forEach((e) => e.isIntersecting && e.target.classList.add('visible')),
       { threshold: 0.08 }
     );
-    document.querySelectorAll('.reveal, .reveal-left, .reveal-right').forEach(
-      (el) => observerRef.current?.observe(el)
-    );
-    return () => observerRef.current?.disconnect();
-  }, [showEmbed]);
+    document.querySelectorAll('.reveal, .reveal-left, .reveal-right').forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, [embedState]);
 
-  const connected  = signalStrength === 100;
   const live       = isLikelyLive();
-  const pluginSrc  = toPluginSrc(streamSrc);
-  const directUrl  = extractFbDirectUrl(pluginSrc);
+  const isScanning = embedState === 'scanning';
+  const directUrl  = toDirectUrl(streamSrc);
+  const pluginSrc  = toPluginSrc(directUrl);
 
+  /* ── Render ─────────────────────────────────────────────────────────────── */
   return (
     <div className="min-h-screen bg-slate-950 text-white animate-fadeIn">
 
-      {/* ── Sticky header ── */}
+      {/* ── Sticky header ──────────────────────────────────────────────────── */}
       <div className="sticky top-20 z-40 bg-slate-900/95 backdrop-blur-xl border-b border-white/5 py-4">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-5">
             <div className="relative">
-              <div className={`w-4 h-4 rounded-full transition-all duration-500 ${connected ? 'bg-red-500 shadow-lg shadow-red-500/50' : 'bg-slate-700'}`} />
-              {connected && <div className="absolute inset-0 w-4 h-4 bg-red-500 rounded-full animate-ping opacity-60" />}
+              <div className={`w-4 h-4 rounded-full transition-all duration-500 ${!isScanning ? 'bg-red-500 shadow-lg shadow-red-500/50' : 'bg-slate-700'}`} />
+              {!isScanning && (
+                <div className="absolute inset-0 w-4 h-4 bg-red-500 rounded-full animate-ping opacity-60" />
+              )}
             </div>
             <div>
               <h1 className="text-xl font-bold flex items-center gap-3">
                 Prophetic Live Altar
                 {live && (
-                  <span className="bg-red-600 text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider animate-pulse">ON AIR</span>
+                  <span className="bg-red-600 text-[9px] px-2 py-0.5 rounded font-black uppercase tracking-wider animate-pulse">
+                    ON AIR
+                  </span>
                 )}
               </h1>
               <p className="text-slate-400 text-[10px] uppercase tracking-[0.2em] mt-0.5">
-                {!connected ? `Scanning Altar Frequency: ${signalStrength}%` : 'Signal Established · Masofa TV'}
+                {isScanning ? `Scanning Altar Frequency: ${signal}%` : 'Signal Established · Masofa TV'}
               </p>
             </div>
           </div>
@@ -164,8 +216,9 @@ const LiveStream: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="hidden sm:flex gap-1 items-end h-5">
               {[1,2,3,4,5].map((i) => (
-                <div key={i}
-                  className={`w-1.5 rounded-full transition-all duration-400 ${signalStrength >= i * 20 ? 'bg-amber-500' : 'bg-slate-700'}`}
+                <div
+                  key={i}
+                  className={`w-1.5 rounded-full transition-all ${signal >= i * 20 ? 'bg-amber-500' : 'bg-slate-700'}`}
                   style={{ height: `${i * 20}%` }}
                 />
               ))}
@@ -174,104 +227,67 @@ const LiveStream: React.FC = () => {
               href={FB_PAGE_LIVE}
               target="_blank"
               rel="noopener noreferrer"
-              className="bg-blue-600 hover:bg-blue-500 px-6 py-2.5 rounded-full text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-900/30 active:scale-95"
+              className="bg-blue-600 hover:bg-blue-500 px-5 py-2.5 rounded-full text-sm font-bold transition-all flex items-center gap-2 shadow-lg shadow-blue-900/30 active:scale-95"
             >
-              <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.383 14.444 5 15.333 5H18V0h-3.333C11.333 0 9 2.333 9 5.333V8z" />
-              </svg>
-              Watch on Facebook
+              <FbIcon className="w-4 h-4 fill-current" />
+              <span className="hidden sm:inline">Watch on Facebook</span>
+              <span className="sm:hidden">Facebook</span>
             </a>
           </div>
         </div>
       </div>
 
-      {/* ── Player ── */}
-      <section className="max-w-6xl mx-auto px-4 py-12">
+      {/* ── Player ─────────────────────────────────────────────────────────── */}
+      <section className="max-w-6xl mx-auto px-3 sm:px-4 py-6 sm:py-12">
         <div
-          ref={playerBoxRef}
-          className="relative aspect-video bg-slate-900 rounded-3xl overflow-hidden shadow-[0_0_80px_rgba(0,0,0,.7)] border border-white/8"
+          ref={playerRef}
+          className="relative aspect-video bg-slate-900 rounded-2xl sm:rounded-3xl overflow-hidden shadow-[0_0_60px_rgba(0,0,0,.6)] border border-white/8"
         >
-          {!showEmbed ? (
-            /* Scanning animation */
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm">
-              <div className="relative mb-8">
-                <div className="w-20 h-20 border-4 border-amber-600/20 border-t-amber-600 rounded-full animate-spin" />
-                <div className="absolute inset-0 flex items-center justify-center text-2xl">📡</div>
+
+          {/* ── Scan animation ─────────────────────────────────────────────── */}
+          {isScanning && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 z-10">
+              <div className="relative mb-6 sm:mb-8">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 border-4 border-amber-600/20 border-t-amber-600 rounded-full animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center text-xl sm:text-2xl">📡</div>
               </div>
-              <h2 className="text-xl font-serif italic text-amber-400">Connecting to Masofa TV…</h2>
-              <p className="text-slate-500 mt-3 text-xs uppercase tracking-widest font-bold">
-                Initialising Satellite Link · {signalStrength}%
+              <h2 className="text-lg sm:text-xl font-serif italic text-amber-400">Connecting to Masofa TV…</h2>
+              <p className="text-slate-500 mt-2 text-[10px] sm:text-xs uppercase tracking-widest font-bold">
+                Initialising Satellite Link · {signal}%
               </p>
-              <div className="mt-6 w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-amber-600 rounded-full transition-all duration-300" style={{ width: `${signalStrength}%` }} />
+              <div className="mt-5 w-40 sm:w-48 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-amber-600 rounded-full transition-all duration-300"
+                  style={{ width: `${signal}%` }}
+                />
               </div>
             </div>
+          )}
 
-          ) : onMobile ? (
-            /*
-             * ── Mobile tap-to-watch card ──────────────────────────────────
-             * Facebook enforces X-Frame-Options and third-party cookie blocks
-             * on ALL mobile browsers. The only working solution on mobile is
-             * to open Facebook natively (app or mobile browser).
-             */
-            <a
-              href={directUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-center px-8 select-none"
-              style={{ background: 'linear-gradient(160deg,#0f172a 0%,#1e1b4b 50%,#0f172a 100%)' }}
-            >
-              {/* Decorative glow */}
-              <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                <div className="absolute -top-20 left-1/2 -translate-x-1/2 w-72 h-72 bg-blue-600/20 rounded-full blur-3xl" />
-                <div className="absolute -bottom-10 left-1/4 w-48 h-48 bg-amber-600/10 rounded-full blur-2xl" />
-              </div>
-
-              {/* Live badge */}
-              {live && (
-                <div className="relative mb-4 flex items-center gap-2 bg-red-600/20 border border-red-500/40 text-red-400 text-xs font-black uppercase tracking-widest px-4 py-2 rounded-full animate-pulse">
-                  <span className="w-2 h-2 bg-red-500 rounded-full inline-block" />
-                  Live Now
+          {/* ── FB SDK embed — shown on all devices ────────────────────────── */}
+          {!isScanning && (embedState === 'sdk-loading' || embedState === 'sdk-ready') && (
+            <>
+              {embedState === 'sdk-loading' && (
+                <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 z-10 pointer-events-none">
+                  <div className="w-9 h-9 border-2 border-amber-600/30 border-t-amber-600 rounded-full animate-spin mb-3" />
+                  <p className="text-slate-500 text-[10px] uppercase tracking-widest">Loading player…</p>
                 </div>
               )}
+              {/* React must NOT touch children of this div — FB SDK manages them */}
+              <div ref={sdkRef} className="absolute inset-0 w-full h-full" />
+              {embedState === 'sdk-ready' && (
+                <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none bg-gradient-to-t from-black/60 to-transparent flex items-end gap-2 z-10">
+                  {live
+                    ? <span className="bg-red-600 px-2.5 py-0.5 rounded font-black text-[9px] tracking-widest animate-pulse">LIVE</span>
+                    : <span className="bg-slate-700 px-2.5 py-0.5 rounded font-black text-[9px] tracking-widest text-slate-300">REPLAY</span>}
+                  <p className="text-[10px] font-bold text-white/70">Masofa TV · BBC International</p>
+                </div>
+              )}
+            </>
+          )}
 
-              {/* Facebook logo */}
-              <div className="relative mb-5 w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-blue-900/60">
-                <svg className="w-11 h-11 fill-white" viewBox="0 0 24 24">
-                  <path d="M9 8H6v4h3v12h5V12h3.642L18 8h-4V6.333C14 5.383 14.444 5 15.333 5H18V0h-3.333C11.333 0 9 2.333 9 5.333V8z" />
-                </svg>
-                {/* Pulse ring */}
-                {live && <span className="absolute inset-0 rounded-3xl border-2 border-blue-400 animate-ping opacity-40" />}
-              </div>
-
-              <h2 className="relative text-2xl font-bold text-white mb-1">
-                {live ? 'We\'re Live!' : 'Watch the Stream'}
-              </h2>
-              <p className="relative text-slate-400 text-sm mb-7 max-w-[220px] leading-relaxed">
-                {live
-                  ? 'Tap below to join the live service on Facebook right now.'
-                  : 'Tap below to watch on Facebook — the best mobile experience.'}
-              </p>
-
-              {/* CTA button */}
-              <span className="relative bg-blue-600 text-white font-black uppercase tracking-widest text-sm px-10 py-4 rounded-2xl shadow-xl shadow-blue-900/50 flex items-center gap-3 active:scale-95 transition-transform">
-                <svg className="w-5 h-5 fill-white" viewBox="0 0 24 24">
-                  <path d="M8 5v14l11-7z" />
-                </svg>
-                {live ? 'Join Live Service' : 'Open & Play'}
-              </span>
-
-              <p className="relative text-slate-600 text-[11px] mt-5">
-                Opens in the Facebook app or your browser
-              </p>
-            </a>
-
-          ) : (
-            /*
-             * ── Desktop iframe embed ──────────────────────────────────────
-             * The 560×314 plugin iframe is scaled via CSS transform to fill
-             * whatever width the container has.
-             */
+          {/* ── Plugin iframe — fallback when FB SDK is unavailable ─────────── */}
+          {!isScanning && embedState === 'iframe' && (
             <>
               <iframe
                 src={pluginSrc}
@@ -289,25 +305,55 @@ const LiveStream: React.FC = () => {
                 }}
                 allowFullScreen
                 allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
-                title="BBC International Live Stream"
+                title="Masofa TV Live Stream"
+                onError={() => setEmbedState('error')}
               />
-              <div className="absolute inset-x-0 bottom-0 p-4 pointer-events-none bg-gradient-to-t from-black/70 to-transparent flex items-end gap-3 z-10">
+              <div className="absolute inset-x-0 bottom-0 p-3 pointer-events-none bg-gradient-to-t from-black/70 to-transparent flex items-end gap-2 z-10">
                 {live
-                  ? <span className="bg-red-600 px-3 py-1 rounded font-black text-[10px] tracking-widest animate-pulse">LIVE</span>
-                  : <span className="bg-slate-700 px-3 py-1 rounded font-black text-[10px] tracking-widest text-slate-300">REPLAY</span>}
-                <p className="text-xs font-bold text-white/80">Masofa TV · BBC International</p>
+                  ? <span className="bg-red-600 px-2.5 py-0.5 rounded font-black text-[9px] tracking-widest animate-pulse">LIVE</span>
+                  : <span className="bg-slate-700 px-2.5 py-0.5 rounded font-black text-[9px] tracking-widest text-slate-300">REPLAY</span>}
+                <p className="text-[10px] font-bold text-white/70">Masofa TV · BBC International</p>
               </div>
             </>
           )}
+
+          {/* ── Error / stream unavailable ──────────────────────────────────── */}
+          {!isScanning && embedState === 'error' && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 text-center px-6">
+              <div className="text-4xl sm:text-5xl mb-4">📡</div>
+              <h3 className="text-lg sm:text-xl font-bold text-white mb-2">Stream Unavailable</h3>
+              <p className="text-slate-400 text-sm mb-6 max-w-xs leading-relaxed">
+                The broadcast may have ended or hasn't started yet.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 items-center">
+                <a
+                  href={live ? FB_PAGE_LIVE : directUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-blue-600 hover:bg-blue-500 text-white font-bold px-7 py-3 rounded-2xl transition-all flex items-center gap-2 text-sm"
+                >
+                  <FbIcon className="w-4 h-4 fill-current" />
+                  Watch on Facebook
+                </a>
+                <button
+                  onClick={() => setEmbedState('sdk-loading')}
+                  className="bg-slate-800 hover:bg-slate-700 text-white font-bold px-7 py-3 rounded-2xl transition-all text-sm"
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+
         </div>
 
-        {/* ── Info & support ── */}
-        <div className="mt-14 grid grid-cols-1 lg:grid-cols-12 gap-10">
+        {/* ── Info & support ─────────────────────────────────────────────────── */}
+        <div className="mt-10 sm:mt-14 grid grid-cols-1 lg:grid-cols-12 gap-8 sm:gap-10">
 
           <div className="lg:col-span-8 space-y-8 reveal-left">
             <div>
-              <h2 className="text-3xl font-bold mb-3">The Anointing Has No Boundaries</h2>
-              <p className="text-slate-400 leading-relaxed text-lg">
+              <h2 className="text-2xl sm:text-3xl font-bold mb-3">The Anointing Has No Boundaries</h2>
+              <p className="text-slate-400 leading-relaxed text-base sm:text-lg">
                 You are connecting to a global prophetic movement. If the player shows "Unavailable,"
                 the stream may have ended or is scheduled for a later hour.
               </p>
@@ -317,20 +363,23 @@ const LiveStream: React.FC = () => {
               </p>
             </div>
 
-            <div className="grid sm:grid-cols-2 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-2 gap-3 sm:gap-4">
               {schedule.map((s) => (
-                <div key={s.day} className="bg-white/5 border border-white/10 p-6 rounded-2xl hover:border-amber-600/40 transition-all">
-                  <span className="text-2xl mb-3 block">{s.icon}</span>
-                  <p className="text-amber-400 font-black text-[10px] uppercase tracking-widest mb-1">{s.day}</p>
-                  <p className="text-white font-bold text-lg">{s.time}</p>
-                  <p className="text-slate-500 text-sm mt-1">{s.name}</p>
+                <div
+                  key={s.day}
+                  className="bg-white/5 border border-white/10 p-4 sm:p-6 rounded-2xl hover:border-amber-600/40 transition-all"
+                >
+                  <span className="text-xl sm:text-2xl mb-2 sm:mb-3 block">{s.icon}</span>
+                  <p className="text-amber-400 font-black text-[9px] sm:text-[10px] uppercase tracking-widest mb-1">{s.day}</p>
+                  <p className="text-white font-bold text-base sm:text-lg">{s.time}</p>
+                  <p className="text-slate-500 text-xs sm:text-sm mt-1">{s.name}</p>
                 </div>
               ))}
             </div>
           </div>
 
           <div className="lg:col-span-4 space-y-5 reveal-right">
-            <div className="bg-amber-600 p-8 rounded-3xl relative overflow-hidden group">
+            <div className="bg-amber-600 p-6 sm:p-8 rounded-3xl relative overflow-hidden group">
               <div className="relative z-10">
                 <h3 className="text-xl font-bold mb-2">Sow into the Altar</h3>
                 <p className="text-amber-100 text-sm mb-6 leading-relaxed">
@@ -347,7 +396,7 @@ const LiveStream: React.FC = () => {
               <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-white/10 rounded-full blur-2xl group-hover:scale-125 transition-transform" />
             </div>
 
-            <div className="bg-slate-900 border border-white/10 p-8 rounded-3xl hover:border-amber-600/20 transition-all">
+            <div className="bg-slate-900 border border-white/10 p-6 sm:p-8 rounded-3xl hover:border-amber-600/20 transition-all">
               <h3 className="text-lg font-bold mb-3">Prophetic Prayer Request</h3>
               <p className="text-slate-400 text-sm mb-6 leading-relaxed">
                 Need a personal prophetic word? Our intercession team is available on WhatsApp.
@@ -358,7 +407,7 @@ const LiveStream: React.FC = () => {
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-3 w-full bg-green-600/15 border border-green-600/30 text-green-400 py-3.5 rounded-2xl font-bold hover:bg-green-600 hover:text-white transition-all text-sm"
               >
-                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z" />
                 </svg>
                 WhatsApp Intercession
@@ -368,12 +417,18 @@ const LiveStream: React.FC = () => {
             <div className="text-center py-4">
               <p className="text-slate-500 text-xs">
                 Never miss a broadcast —{' '}
-                <a href="https://www.facebook.com/AkowuahJosephMinistries" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:underline font-bold">
+                <a
+                  href="https://www.facebook.com/AkowuahJosephMinistries"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-amber-400 hover:underline font-bold"
+                >
                   follow us on Facebook
                 </a>
               </p>
             </div>
           </div>
+
         </div>
       </section>
     </div>

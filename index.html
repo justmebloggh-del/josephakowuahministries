@@ -208,10 +208,10 @@
   </head>
 
   <body class="bg-white text-slate-900">
-    <!-- Facebook SDK -->
+    <!-- Facebook SDK (v19.0) — loaded once; LiveStream calls FB.XFBML.parse() on each SPA mount -->
     <div id="fb-root"></div>
     <script async defer crossorigin="anonymous"
-      src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v18.0"></script>
+      src="https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v19.0&appId="></script>
 
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
